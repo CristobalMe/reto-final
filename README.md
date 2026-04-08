@@ -4,5 +4,5 @@
 
 Ideas:
 Mejorar UX/UI
-Deteccion de errores con series de tiempo
+Deteccion de errores con series de tiempo (Rechazado por estacionalidad en restaurantes)
 Reglas empiricas para deteccion de fraudes
