@@ -4,5 +4,5 @@
 
 Ideas:
 Mejorar UX/UI
-Deteccion de errores
+Deteccion de errores con series de tiempo
 Reglas empiricas para deteccion de fraudes
