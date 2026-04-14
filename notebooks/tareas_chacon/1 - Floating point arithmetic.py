@@ -9,7 +9,8 @@ def harmonic_sum_forward(N):
     Calculates sum(1/n) from n=1 to N.
     """
     total = 0.0
-    # TODO: Implement the loop from 1 to N
+    for n in range(1, N + 1):
+        total += 1.0 / n
     return total
 
 def harmonic_sum_backward(N):
@@ -17,7 +18,8 @@ def harmonic_sum_backward(N):
     Calculates sum(1/n) from n=N down to 1.
     """
     total = 0.0
-    # TODO: Implement the loop from N down to 1
+    for n in range(N, 0, -1):
+        total += 1.0 / n
     return total
 
 # ==========================================
