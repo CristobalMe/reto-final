@@ -2,3 +2,4 @@
 .env.*
 !.env.example
 data/talos_tecmty
+src/__pycache__
