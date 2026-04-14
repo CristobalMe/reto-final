@@ -1,0 +1,20 @@
+name: talos
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  # DB connectivity
+  - sqlalchemy>=2.0,<3.0
+  - pymysql>=1.1,<2.0
+  # Data
+  - pandas>=2.2,<3.0
+  - numpy>=2.0,<3.0
+  # Visualisation
+  - matplotlib>=3.9,<4.0
+  - seaborn>=0.13,<1.0
+  # Notebooks
+  - jupyter>=1.1,<2.0
+  - ipykernel>=6.29,<7.0
