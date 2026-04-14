@@ -47,15 +47,17 @@ DEFAULT_THRESHOLDS: dict = {
     "Gastos":    {"faltante_critico": -5_000, "faltante_alto": -1_500, "sobrante_alto": 1_500},
     "_default":  {"faltante_critico": -3_000, "faltante_alto": -800,  "sobrante_alto": 800},
     # % variación absoluta para R03
-    "pct_variacion_alta": 15.0,    # >15% de diferencia vs teórico
+    "pct_variacion_alta": 15.0,              # >15% de diferencia vs teórico
+    "pct_variacion_min_stockteorico": 1.0,   # stock mínimo para que R03 tenga sentido
+    "pct_variacion_min_diferencia":   0.5,   # diferencia mínima en unidades para R03
     # Reajuste manual elevado (unidades) para R06
     "reajuste_umbral_pct": 10.0,   # reajuste > 10% del stock teórico
     # Merma/devolución excesiva para R08
     "merma_pct": 5.0,              # devolución > 5% del stock teórico
     # Compra sin consumo: si ingresocompra > 0 y egresoventa < X% de ingresocompra
     "compra_sin_consumo_pct": 5.0,
-    # Sin conteo físico: stockfisico = 0 cuando stockteorico > umbral
-    "sin_conteo_min_stockteorico": 1.0,
+    # Sin conteo físico: stockfisico = 0 cuando stockteorico > umbral Y hay movimiento
+    "sin_conteo_min_stockteorico": 5.0,
 }
 
 
@@ -103,10 +105,29 @@ def _alert(
 def rule_R01_faltante_significativo(
     df: pd.DataFrame, thresholds: dict
 ) -> list[Alert]:
-    """R01 — Faltante monetario significativo (difimporte muy negativo)."""
+    """R01 — Faltante significativo: usa difimporte cuando hay costo cargado;
+    cae a diferencia en unidades cuando costopromedio = 0."""
     alerts = []
     for _, row in df.iterrows():
         val = float(row.get("difimporte", 0) or 0)
+        diferencia = float(row.get("diferencia", 0) or 0)
+        costo = float(row.get("costopromedio", 0) or 0)
+
+        # Si no hay costo cargado, trabajar en unidades usando diferencia directa.
+        # El umbral monetario se omite; se aplica solo el criterio de diferencia < 0.
+        sin_costo = costo == 0
+
+        if sin_costo:
+            if diferencia >= 0:
+                continue
+            sev = "ALTA"
+            msg = (
+                f"Faltante de {abs(diferencia):.2f} u en '{row['producto_nombre']}' "
+                f"(sin costo cargado — impacto $ no calculable)."
+            )
+            alerts.append(_alert("R01", sev, "Faltante", row, msg))
+            continue
+
         if val >= 0:
             continue
         cat = row.get("categoria_nombre", "_default")
@@ -133,10 +154,24 @@ def rule_R01_faltante_significativo(
 def rule_R02_sobrante_significativo(
     df: pd.DataFrame, thresholds: dict
 ) -> list[Alert]:
-    """R02 — Sobrante monetario significativo (difimporte positivo inusual)."""
+    """R02 — Sobrante significativo: usa difimporte con costo; unidades sin costo."""
     alerts = []
     for _, row in df.iterrows():
         val = float(row.get("difimporte", 0) or 0)
+        diferencia = float(row.get("diferencia", 0) or 0)
+        costo = float(row.get("costopromedio", 0) or 0)
+        sin_costo = costo == 0
+
+        if sin_costo:
+            if diferencia <= 0:
+                continue
+            msg = (
+                f"Sobrante de {diferencia:.2f} u en '{row['producto_nombre']}' "
+                f"(sin costo cargado). Verificar conteo."
+            )
+            alerts.append(_alert("R02", "MEDIA", "Sobrante", row, msg))
+            continue
+
         if val <= 0:
             continue
         cat = row.get("categoria_nombre", "_default")
@@ -153,19 +188,36 @@ def rule_R02_sobrante_significativo(
 def rule_R03_variacion_pct_alta(
     df: pd.DataFrame, thresholds: dict
 ) -> list[Alert]:
-    """R03 — Variación porcentual > umbral vs stock teórico."""
+    """R03 — Variación porcentual > umbral vs stock teórico.
+
+    Solo se activa cuando el stock teórico es >= 1.0 unidad y la diferencia
+    en unidades es >= 0.5. Evita falsos positivos por denominadores ínfimos.
+    """
     umbral = thresholds.get("pct_variacion_alta", 15.0)
+    min_stock = thresholds.get("pct_variacion_min_stockteorico", 1.0)
+    min_diferencia = thresholds.get("pct_variacion_min_diferencia", 0.5)
     alerts = []
     for _, row in df.iterrows():
+        stockteorico = float(row.get("stockteorico", 0) or 0)
+        diferencia = float(row.get("diferencia", 0) or 0)
+        # Skip if base stock is too small (percentage would be meaningless)
+        if abs(stockteorico) < min_stock:
+            continue
+        # Skip if the physical difference is negligible
+        if abs(diferencia) < min_diferencia:
+            continue
         pct = _pct_variance(row)
         if pd.isna(pct):
+            continue
+        # Cap: pct > 10 000 % is almost certainly corrupt data, not a real variance
+        if abs(pct) > 10_000:
             continue
         if abs(pct) > umbral:
             direction = "negativa" if pct < 0 else "positiva"
             msg = (
                 f"Variación {direction} de {pct:.1f}% en '{row['producto_nombre']}' "
-                f"({row.get('diferencia', 0):+.2f} {row.get('unidadmedida_nombre', 'u')} "
-                f"vs teórico {row.get('stockteorico', 0):.2f})."
+                f"({diferencia:+.2f} {row.get('unidadmedida_nombre', 'u')} "
+                f"vs teórico {stockteorico:.2f})."
             )
             alerts.append(_alert("R03", "ALTA", "Variación %", row, msg, pct=pct))
     return alerts
@@ -342,21 +394,32 @@ def rule_R10_sin_conteo_fisico(
 ) -> list[Alert]:
     """
     R10 — Producto con stock teórico positivo pero conteo físico = 0.
-    Puede indicar que no se realizó el conteo o que el producto desapareció.
+    Solo alerta cuando hay evidencia de actividad real en el periodo (entradas
+    o salidas > 0), para evitar falsos positivos en productos inactivos.
     """
-    min_stock = thresholds.get("sin_conteo_min_stockteorico", 1.0)
+    min_stock = thresholds.get("sin_conteo_min_stockteorico", 5.0)
     alerts = []
     for _, row in df.iterrows():
         stockfisico = float(row.get("stockfisico", 0) or 0)
         stockteorico = float(row.get("stockteorico", 0) or 0)
         if stockfisico != 0:
             continue
-        if stockteorico >= min_stock:
-            msg = (
-                f"'{row['producto_nombre']}' tiene stock teórico de {stockteorico:.2f} u "
-                f"pero conteo físico registrado como 0. Verificar si se realizó el conteo."
-            )
-            alerts.append(_alert("R10", "MEDIA", "Conteo", row, msg))
+        if stockteorico < min_stock:
+            continue
+        # Only alert if there was actual movement this period
+        movimiento = sum(
+            float(row.get(col, 0) or 0)
+            for col in ("ingresocompra", "ingresorequisicion",
+                        "egresoventa", "egresorequisicion")
+        )
+        if movimiento <= 0:
+            continue
+        msg = (
+            f"'{row['producto_nombre']}' tiene stock teórico de {stockteorico:.2f} u "
+            f"con movimientos registrados, pero el conteo físico es 0. "
+            f"Verificar si se realizó el conteo."
+        )
+        alerts.append(_alert("R10", "MEDIA", "Conteo", row, msg))
     return alerts
 
 
