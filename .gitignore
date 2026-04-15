@@ -1,5 +1,7 @@
 .env
+.vscode
 .env.*
+.DS_Store
 !.env.example
 data/talos_tecmty
 notebooks/tareas_chacon/__pycache__
