@@ -29,7 +29,10 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
     missing: unresolved.filter(a => a.tipo === 'missing').length,
   };
   const total = counts.loss + counts.surplus + counts.missing;
-  const r = 80, cx = 90, cy = 90;
+  const size = 180;
+  const stroke = 24;
+  // Keep the stroke fully inside the SVG bounds to avoid clipping the ring edges.
+  const r = (size - stroke) / 2, cx = size / 2, cy = size / 2;
   const circ = 2 * Math.PI * r;
   const segments = [
     { key: 'loss', count: counts.loss, color: 'var(--danger)' },
@@ -40,8 +43,8 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
 
   return (
     <div className="donut-wrap">
-      <svg className="donut-svg" width="180" height="180" viewBox="0 0 180 180">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--muted-2)" strokeWidth="24" />
+      <svg className="donut-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--muted-2)" strokeWidth={stroke} />
         {total > 0 && segments.map(s => {
           const len = (s.count / total) * circ;
           const el = (
@@ -50,7 +53,7 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
               cx={cx} cy={cy} r={r}
               fill="none"
               stroke={s.color}
-              strokeWidth="24"
+              strokeWidth={stroke}
               strokeDasharray={`${len} ${circ}`}
               strokeDashoffset={-acc}
             />
