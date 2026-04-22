@@ -15,7 +15,7 @@ services:
       - ./deployment/mysql/initdb:/docker-entrypoint-initdb.d:ro
       - ./data/talos_tecmty:/seed:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      test: ["CMD-SHELL", "mysqladmin --no-defaults ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
       timeout: 5s
       retries: 20
