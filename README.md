@@ -46,3 +46,20 @@ Notas:
 docker compose down -v
 docker compose up -d mysql
 ```
+
+## Desarrollo en tiempo real con Docker
+
+Para que frontend y backend reflejen cambios al instante, usa el override `docker-compose.dev.yml`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+- Frontend: corre en modo `next dev` con recarga en caliente.
+- Backend: usa bind mount de `./app/backend` (el `--reload` ya está en su `CMD`).
+
+Para detener:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+```

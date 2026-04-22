@@ -1,0 +1,22 @@
+services:
+  frontend:
+    build:
+      context: ./app/frontend
+      dockerfile: Dockerfile
+      target: deps
+    command: sh -c "if [ ! -x node_modules/.bin/next ]; then npm ci; fi && npm run dev -- --hostname 0.0.0.0 --port 3000"
+    volumes:
+      - ./app/frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+
+  backend:
+    volumes:
+      - ./app/backend:/app
+
+volumes:
+  frontend_node_modules:
+  frontend_next:
