@@ -17,6 +17,11 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Talos · Alertas de Inventario",
   description: "Detección de discrepancias de inventario",
+  icons: {
+    icon: "/talos_logo.png",
+    shortcut: "/talos_logo.png",
+    apple: "/talos_logo.png",
+  },
 };
 
 export default function RootLayout({
