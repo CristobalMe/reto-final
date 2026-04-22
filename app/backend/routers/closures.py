@@ -25,8 +25,11 @@ def list_closures(
             i.inventariomes_estatus AS estatus,
             i.inventariomes_total AS total,
             i.inventariomes_faltantes AS faltantes,
-            i.inventariomes_sobrantes AS sobrantes
+            i.inventariomes_sobrantes AS sobrantes,
+            a.almacen_nombre      AS almacen_nombre,
+            a.almacen_encargado   AS almacen_encargado
         FROM inventariomes i
+        LEFT JOIN almacen a ON a.idalmacen = i.idalmacen
         WHERE i.inventariomes_estatus IN :statuses
           AND i.inventariomes_fecha >= DATE_SUB(NOW(), INTERVAL :months MONTH)
           {sucursal_clause}

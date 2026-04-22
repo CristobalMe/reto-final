@@ -71,6 +71,29 @@ class ClosureHeader(BaseModel):
     faltantes: float
     sobrantes: float
     total_fisico: float
+    almacen_nombre: str | None = None
+    almacen_encargado: str | None = None
+
+
+class ProductContext(BaseModel):
+    idproducto: int
+    producto_nombre: str
+    producto_clase: str | None = None
+    unidad: str | None = None
+    categoria_nombre: str | None = None
+    subcategoria_nombre: str | None = None
+    stockinicial: float = 0.0
+    stockteorico: float = 0.0
+    stockfisico: float = 0.0
+    diferencia: float = 0.0
+    difimporte: float = 0.0
+    costopromedio: float = 0.0
+    ingresocompra: float = 0.0
+    ingresoordentablajeria: float = 0.0
+    egresoventa: float = 0.0
+    egresoordentablajeria: float = 0.0
+    egresodevolucion: float = 0.0
+    aclaracion: str | None = None
 
 
 class SeveritySummary(BaseModel):
@@ -91,6 +114,7 @@ class LocalReport(BaseModel):
     findings: list[Finding]
     summary_by_severity: list[SeveritySummary]
     summary_by_category: list[CategorySummary]
+    context_by_idproducto: dict[str, ProductContext] = Field(default_factory=dict)
 
 
 class HistoricalReport(BaseModel):

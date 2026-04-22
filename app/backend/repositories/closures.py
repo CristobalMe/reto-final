@@ -27,8 +27,11 @@ def get_closure_header(engine: Engine, idinventariomes: int) -> pd.DataFrame:
             i.inventariomes_totalimportefisico AS total_fisico,
             i.inventariomes_finalalimentos AS final_alimentos,
             i.inventariomes_finalbebidas   AS final_bebidas,
-            i.inventariomes_finalmiscelaneos AS final_miscelaneos
+            i.inventariomes_finalmiscelaneos AS final_miscelaneos,
+            a.almacen_nombre                AS almacen_nombre,
+            a.almacen_encargado             AS almacen_encargado
         FROM inventariomes i
+        LEFT JOIN almacen a ON a.idalmacen = i.idalmacen
         WHERE i.idinventariomes = :id
     """
     return _read(engine, sql, {"id": idinventariomes})
@@ -43,6 +46,7 @@ def get_closure_detail(engine: Engine, idinventariomes: int) -> pd.DataFrame:
             d.idproducto,
             p.producto_nombre,
             p.producto_tipo,
+            p.clase_clave                                       AS producto_clase,
             p.producto_costo                                    AS producto_costo_ref,
             p.producto_ultimocosto                              AS producto_ultimocosto,
             cat_root.categoria_nombre                           AS categoria_nombre,
