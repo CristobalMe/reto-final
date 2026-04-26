@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { DashboardAlert, AlertTipo, ClosureListItem, Severity } from '../lib/types';
 import { fmtMoney, fmtNum, fmtDate } from '../lib/format';
 import { listRecentClosures, getLocalReport } from '../lib/api';
@@ -301,13 +301,17 @@ export default function AlertDashboard() {
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
   const [revisadas, setRevisadas] = useState<Set<string>>(new Set());
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const rightColRef = useRef<HTMLDivElement>(null);
 
   // Fetch closure list on mount
   useEffect(() => {
     listRecentClosures({ months: 24, limit: 60 })
       .then(data => {
         setClosures(data);
-        if (data.length > 0) setSelectedClosureId(data[0].idinventariomes);
+        if (data.length > 0) {
+          const preferred = data.find(c => c.idinventariomes === 118888);
+          setSelectedClosureId(preferred ? preferred.idinventariomes : data[0].idinventariomes);
+        }
       })
       .catch(e => setError(String(e.message)));
   }, []);
@@ -335,6 +339,13 @@ export default function AlertDashboard() {
       .catch(e => setError(String(e.message)))
       .finally(() => setLoading(false));
   }, [selectedClosureId]);
+
+  // Scroll detail panel into view on mobile when an alert is selected
+  useEffect(() => {
+    if (selectedAlertId && rightColRef.current && window.innerWidth <= 1080) {
+      rightColRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedAlertId]);
 
   // Filtered + sorted alerts
   const visible = useMemo(() => {
@@ -623,7 +634,7 @@ export default function AlertDashboard() {
           </div>
 
           {/* ── Right Column ── */}
-          <div className="right-col">
+          <div className="right-col" ref={rightColRef}>
             {selectedAlert ? (
               <DetailPanel
                 alert={selectedAlert}
