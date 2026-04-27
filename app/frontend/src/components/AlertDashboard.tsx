@@ -309,7 +309,7 @@ export default function AlertDashboard() {
       .then(data => {
         setClosures(data);
         if (data.length > 0) {
-          const preferred = data.find(c => c.idinventariomes === 118888);
+          const preferred = data.find((c: { idinventariomes: number }) => c.idinventariomes === 118888);
           setSelectedClosureId(preferred ? preferred.idinventariomes : data[0].idinventariomes);
         }
       })
