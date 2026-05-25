@@ -9,6 +9,7 @@ import { mapFindings } from '../lib/mapFindings';
 
 type FilterTipo = AlertTipo | 'all' | 'resolved';
 type FilterSeverity = Severity | 'all';
+type FilterCategory = string | 'all';
 type SortBy = 'score' | 'mxn' | 'diff';
 
 const TIPO_LABEL: Record<AlertTipo | 'resolved', string> = {
@@ -296,6 +297,7 @@ export default function AlertDashboard() {
 
   const [filterTipo, setFilterTipo] = useState<FilterTipo>('all');
   const [filterSeverity, setFilterSeverity] = useState<FilterSeverity>('all');
+  const [filterCategory, setFilterCategory] = useState<FilterCategory>('all');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('score');
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
@@ -335,6 +337,7 @@ export default function AlertDashboard() {
         setRevisadas(new Set());
         setFilterTipo('all');
         setFilterSeverity('all');
+        setFilterCategory('all');
       })
       .catch(e => setError(String(e.message)))
       .finally(() => setLoading(false));
@@ -347,6 +350,12 @@ export default function AlertDashboard() {
     }
   }, [selectedAlertId]);
 
+  // Unique categories sorted alphabetically
+  const categories = useMemo(() => {
+    const set = new Set(alerts.map(a => a.producto_cat_nombre).filter(Boolean));
+    return Array.from(set).sort();
+  }, [alerts]);
+
   // Filtered + sorted alerts
   const visible = useMemo(() => {
     return alerts
@@ -356,6 +365,7 @@ export default function AlertDashboard() {
         if (isResolved) return false;
         if (filterTipo !== 'all' && a.tipo !== filterTipo) return false;
         if (filterSeverity !== 'all' && a.severity_label !== filterSeverity) return false;
+        if (filterCategory !== 'all' && a.producto_cat_nombre !== filterCategory) return false;
         if (search) {
           const q = search.toLowerCase();
           return a.producto_nombre.toLowerCase().includes(q) || a.message.toLowerCase().includes(q);
@@ -367,7 +377,7 @@ export default function AlertDashboard() {
         if (sortBy === 'mxn') return Math.abs(b.difimporte) - Math.abs(a.difimporte);
         return Math.abs(b.diferencia) - Math.abs(a.diferencia);
       });
-  }, [alerts, filterTipo, filterSeverity, search, sortBy, revisadas]);
+  }, [alerts, filterTipo, filterSeverity, filterCategory, search, sortBy, revisadas]);
 
   const selectedAlert = useMemo(
     () => alerts.find(a => a.id === selectedAlertId) ?? null,
@@ -529,6 +539,29 @@ export default function AlertDashboard() {
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              <div className="filter-group">
+                <p className="filter-label">Categoría</p>
+                <div className="chip-row">
+                  <button
+                    className={`chip${filterCategory === 'all' ? ' active' : ''}`}
+                    onClick={() => setFilterCategory('all')}
+                  >
+                    Todas
+                    <span className="count">{alerts.length}</span>
+                  </button>
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      className={`chip${filterCategory === cat ? ' active' : ''}`}
+                      onClick={() => setFilterCategory(cat)}
+                    >
+                      {cat}
+                      <span className="count">{alerts.filter(a => a.producto_cat_nombre === cat).length}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
