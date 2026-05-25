@@ -14,7 +14,6 @@ This document defines all metrics available in the metrics module. Metrics are c
 | **H01** | Faltante Recurrente | Product shows shortages in N or more consecutive closures at the same branch | 🔴 CRÍTICA | Product-Branch historical |
 | **H02** | Z-score de Cierres | Closure total shortage is statistically anomalous vs branch history | 🟠 ALTA | Branch historical |
 | **H03** | Concentración por Auditor | Auditor's closures show higher shortages than peers or frequent self-captures | 🟠 ALTA | Auditor historical |
-| **H04** | Faltante Persistente | Product shows shortage in majority of closures at a branch | 🟠 ALTA | Product-Branch historical |
 | **R01** | Faltante Significativo | Product shortage exceeds category-specific MXN cutoffs | 🟠 ALTA | Single closure, per-product |
 | **R02** | Sobrante Significativo | Product surplus exceeds category cutoffs | 🟠 ALTA | Single closure, per-product |
 | **R03** | Variación % Elevada | Percent difference between physical and theoretical stock exceeds threshold | 🟠 ALTA  | Single closure, per-product |
@@ -90,25 +89,6 @@ Historical metrics operate across many closures for a branch, product, or audito
 | `min_closures` | 3 | Minimum number of closures required for auditor to be analyzed |
 | `z_high` | 1.5 | Z-score threshold relative to peer performance |
 | `self_closure_share_high` | 0.5 | Threshold for percentage of self-captured closures (50%) |
-
----
-
-### H04: Product-Branch Persistence
-**Faltante Persistente Producto-Sucursal**
-
-**Description:** Identifies products that show shortages in the majority of their closures at a specific branch, indicating a chronic leakage point or systemic issue.
-
-**Category:** `CHRONIC_LEAKAGE`  
-**Severity:** 🟠 ALTA  
-**Scope:** Product-Branch historical analysis
-
-**Thresholds:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `min_closures_appearing` | 4 | Minimum number of closures for a product at a branch to be analyzed |
-| `min_shortage_share` | 0.75 | Minimum percentage of closures where product was short (75%) |
-| `min_shortage_mxn` | -100.0 | Minimum monetary value (MXN) to classify as a shortage event |
 
 ---
 
