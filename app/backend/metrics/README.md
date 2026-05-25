@@ -13,7 +13,7 @@ This document defines all metrics available in the metrics module. Metrics are c
 |---|---|---|---|---|
 | **H01** | Faltante Recurrente | Product shows shortages in N or more consecutive closures at the same branch | 🔴 CRÍTICA | Product-Branch historical |
 | **H02** | Z-score de Cierres | Closure total shortage is statistically anomalous vs branch history | 🟠 ALTA | Branch historical |
-| **H03** | Concentración por Auditor | Auditor's closures show higher shortages than peers or frequent self-captures | 🟠 ALTA | Auditor historical |
+| **H03** | Concentración por Auditor | Auditor's closures show higher shortages than peers or frequent self-captures | 🟠 ALTA - 🔴 CRÍTICA | Auditor historical |
 | **H04** | Faltante Persistente | Product shows shortage in majority of closures at a branch | 🟠 ALTA | Product-Branch historical |
 | **R01** | Faltante Significativo | Product shortage exceeds category-specific MXN cutoffs | 🟠 ALTA | Single closure, per-product |
 | **R02** | Sobrante Significativo | Product surplus exceeds category cutoffs | 🟠 ALTA | Single closure, per-product |
@@ -80,7 +80,7 @@ Historical metrics operate across many closures for a branch, product, or audito
 **Description:** Identifies auditors whose closures in a branch show consistently higher shortages than peers, or who frequently close their own captures (potential self-interest bias).
 
 **Category:** `AUDITOR_OUTLIER`  
-**Severity:** 🟠 ALTA  
+**Severity:** 🟠 ALTA - 🔴 CRÍTICA  
 **Scope:** Auditor historical performance analysis
 
 **Thresholds:**
