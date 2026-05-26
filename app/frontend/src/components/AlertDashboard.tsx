@@ -18,24 +18,69 @@ const PULPO_JOKES = [
   'El pulpo pidió aumento. El jefe dijo que no. El pulpo apretó el botón de renuncia… ocho veces.',
 ];
 
+const CAGE_MESSAGES = [
+  '¡AUXILIO! ¡Me roban! ¡Haz clic para liberarme!',
+  '¡No es justo! ¡Yo solo quería revisar los sobrantes! ¡Sácame de aquí!',
+  '¡Soy inocente! ¡El faltante no fui yo… bueno, no todo! ¡Clic para salir!',
+];
+
+const FREE_MESSAGES = [
+  '¡Gracias, héroe! ¡El inventario está a salvo!',
+];
+
 // ─── Pulpo Mascot (green-screen chroma key via canvas) ────────────────────────
 function PulpoMascot() {
-  const videoRef  = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const walkerRef = useRef<HTMLDivElement>(null);
-  const wrapRef   = useRef<HTMLDivElement>(null);
-  const bubbleRef = useRef<HTMLDivElement>(null);
-  const rafRef    = useRef<number>(0);
-  const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pausedRef = useRef(false);
-  const [joke, setJoke] = useState<string | null>(null);
+  const videoRef     = useRef<HTMLVideoElement>(null);
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const walkerRef    = useRef<HTMLDivElement>(null);
+  const wrapRef      = useRef<HTMLDivElement>(null);
+  const bubbleRef    = useRef<HTMLDivElement>(null);
+  const rafRef       = useRef<number>(0);
+  const timerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pausedRef    = useRef(false);
+  const cagedRef     = useRef(false);
+  const [joke,  setJoke]  = useState<string | null>(null);
+  const [caged, setCaged] = useState(false);
 
-  useEffect(() => { pausedRef.current = !!joke; }, [joke]);
+  useEffect(() => { pausedRef.current = caged || !!joke; }, [caged, joke]);
+  useEffect(() => { cagedRef.current  = caged; }, [caged]);
+
+  const scheduleCage = useCallback(() => {
+    if (cageTimerRef.current) clearTimeout(cageTimerRef.current);
+    const delay = 20000 + Math.random() * 25000; // 20–45 s
+    cageTimerRef.current = setTimeout(() => setCaged(true), delay);
+  }, []);
+
+  // Kick off first cage timer on mount
+  useEffect(() => {
+    scheduleCage();
+    return () => { if (cageTimerRef.current) clearTimeout(cageTimerRef.current); };
+  }, [scheduleCage]);
+
+  // Show cage message as soon as caged
+  useEffect(() => {
+    if (!caged) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setJoke(CAGE_MESSAGES[Math.floor(Math.random() * CAGE_MESSAGES.length)]);
+    // no auto-dismiss while caged — user must click
+  }, [caged]);
 
   function handleClick() {
+    if (cagedRef.current) {
+      // Free the pulpo
+      setCaged(false);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setJoke(FREE_MESSAGES[Math.floor(Math.random() * FREE_MESSAGES.length)]);
+      timerRef.current = setTimeout(() => {
+        setJoke(null);
+        scheduleCage();
+      }, 3000);
+      return;
+    }
+    // Tell a joke
     if (timerRef.current) clearTimeout(timerRef.current);
-    const next = PULPO_JOKES[Math.floor(Math.random() * PULPO_JOKES.length)];
-    setJoke(next);
+    setJoke(PULPO_JOKES[Math.floor(Math.random() * PULPO_JOKES.length)]);
     timerRef.current = setTimeout(() => setJoke(null), 5000);
   }
 
@@ -116,15 +161,16 @@ function PulpoMascot() {
     <div className="pulpo-mascot" ref={wrapRef}>
       <video ref={videoRef} src="/pulpo.mp4" loop muted playsInline style={{ display: 'none' }} />
       <div
-        className="pulpo-walker"
+        className={`pulpo-walker${caged ? ' caged' : ''}`}
         ref={walkerRef}
         onClick={handleClick}
         style={{ cursor: 'pointer', pointerEvents: 'auto' }}
       >
+        {caged && <div className="pulpo-cage" />}
         <canvas ref={canvasRef} className="pulpo-canvas" />
       </div>
       {joke && (
-        <div className="pulpo-bubble" ref={bubbleRef}>{joke}</div>
+        <div className={`pulpo-bubble${caged ? ' caged' : ''}`} ref={bubbleRef}>{joke}</div>
       )}
     </div>
   );
