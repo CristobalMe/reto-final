@@ -588,6 +588,54 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
   animation: pulpo-bob 0.55s ease-in-out infinite;
 }
 
+.pulpo-bubble {
+  position: absolute;
+  top: calc(100% + 10px);  /* below the topbar */
+  /* left is set by JS to clamp within container */
+  background: white;
+  color: var(--ink-900);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 13px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  width: 210px;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.13);
+  white-space: normal;
+  z-index: 200;
+  animation: bubble-in 0.18s ease-out;
+  pointer-events: none;
+}
+
+/* Arrow pointing up toward the pulpo */
+.pulpo-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 8px solid transparent;
+  border-bottom-color: var(--border);
+}
+
+.pulpo-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: calc(100% - 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-bottom-color: white;
+}
+
+@keyframes bubble-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1); }
+}
+
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 1280px) {

@@ -3,13 +3,41 @@
 import Image from 'next/image';
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 
+const PULPO_JOKES = [
+  '¿Por qué el pulpo es el mejor auditor? ¡Tiene ocho brazos para revisar ocho almacenes al mismo tiempo!',
+  'El pulpo encontró un faltante de calamares. Obvio… se los comió él.',
+  '¿Qué le dijo el pulpo al inventario? "Contigo tengo todo bien agarrado."',
+  'Un pulpo en una auditoría es imparable: firma, revisa, sella, calcula, apunta, archiva, reporta… ¡y todavía le sobra un tentáculo!',
+  '¿Por qué el pulpo no usa Excel? Porque con ocho manos prefiere ocho hojas de cálculo.',
+  'El pulpo dice: "Yo no tengo discrepancias… solo tentáculos con criterio propio."',
+  '¿Sabes por qué el pulpo es bueno en TALOS? Detecta anomalías con todos sus sentidos… ¡y son muchos!',
+  '¿Por qué el pulpo nunca pierde la cuenta? Porque tiene ocho dedos y ningún jefe.',
+  'El pulpo intentó hacer home office. Falló: necesitaba ocho monitores y solo tenía uno.',
+  '¿Qué hace el pulpo cuando hay sobrante? Lo abraza con los ocho tentáculos y dice: "Este ya es mío."',
+  '¿Cómo saluda el pulpo? "¡Hola, hola, hola, hola, hola, hola, hola, hola!"',
+  'El pulpo pidió aumento. El jefe dijo que no. El pulpo apretó el botón de renuncia… ocho veces.',
+];
+
 // ─── Pulpo Mascot (green-screen chroma key via canvas) ────────────────────────
 function PulpoMascot() {
   const videoRef  = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const walkerRef = useRef<HTMLDivElement>(null);
   const wrapRef   = useRef<HTMLDivElement>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
   const rafRef    = useRef<number>(0);
+  const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pausedRef = useRef(false);
+  const [joke, setJoke] = useState<string | null>(null);
+
+  useEffect(() => { pausedRef.current = !!joke; }, [joke]);
+
+  function handleClick() {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    const next = PULPO_JOKES[Math.floor(Math.random() * PULPO_JOKES.length)];
+    setJoke(next);
+    timerRef.current = setTimeout(() => setJoke(null), 5000);
+  }
 
   useEffect(() => {
     const video  = videoRef.current;
@@ -24,9 +52,9 @@ function PulpoMascot() {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
-    const SPEED = 60; // px per second
+    const SPEED = 60;
     let x = 0;
-    let dir = 1; // 1 = right, -1 = left
+    let dir = 1;
     let prev = 0;
 
     function tick(ts: number) {
@@ -36,11 +64,22 @@ function PulpoMascot() {
       const canvasW = canvas!.offsetWidth || 0;
       const travel  = Math.max(0, wrap!.offsetWidth - canvasW);
 
-      x += dir * SPEED * dt;
-      if (x >= travel) { x = travel; dir = -1; }
-      if (x <= 0)      { x = 0;      dir =  1; }
+      if (!pausedRef.current) {
+        x += dir * SPEED * dt;
+        if (x >= travel) { x = travel; dir = -1; }
+        if (x <= 0)      { x = 0;      dir =  1; }
+        walker!.style.transform = `translateX(${x}px) scaleX(${dir === -1 ? -1 : 1})`;
+      }
 
-      walker!.style.transform = `translateX(${x}px) scaleX(${dir === -1 ? -1 : 1})`;
+      // Clamp bubble horizontally so it never leaves the container
+      const bubble = bubbleRef.current;
+      if (bubble) {
+        const bw      = bubble.offsetWidth || 210;
+        const center  = x + canvasW / 2;
+        const clamped = Math.max(bw / 2, Math.min(wrap!.offsetWidth - bw / 2, center));
+        bubble.style.left      = `${clamped}px`;
+        bubble.style.transform = 'translateX(-50%)';
+      }
 
       // Chroma-key frame
       if (!video!.paused && !video!.ended && canvas!.width > 0) {
@@ -76,9 +115,17 @@ function PulpoMascot() {
   return (
     <div className="pulpo-mascot" ref={wrapRef}>
       <video ref={videoRef} src="/pulpo.mp4" loop muted playsInline style={{ display: 'none' }} />
-      <div className="pulpo-walker" ref={walkerRef}>
+      <div
+        className="pulpo-walker"
+        ref={walkerRef}
+        onClick={handleClick}
+        style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+      >
         <canvas ref={canvasRef} className="pulpo-canvas" />
       </div>
+      {joke && (
+        <div className="pulpo-bubble" ref={bubbleRef}>{joke}</div>
+      )}
     </div>
   );
 }
