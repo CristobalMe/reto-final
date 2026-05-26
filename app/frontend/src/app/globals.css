@@ -77,7 +77,6 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
 .nav a:hover { background: rgba(255,255,255,0.1); color: white; }
 .nav a.active { background: var(--olive-700); color: white; }
 .topbar-right {
-  margin-left: auto;
   display: flex; align-items: center; gap: 14px;
 }
 .search {
@@ -559,6 +558,35 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
   z-index: 200;
 }
 .toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ─── Pulpo Mascot ────────────────────────────────────────────────────────── */
+
+@keyframes pulpo-bob {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-4px); }
+}
+
+.pulpo-mascot {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  align-self: stretch;
+  pointer-events: none;
+}
+
+.pulpo-walker {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.pulpo-canvas {
+  display: block;
+  height: 56px;
+  width: auto;
+  animation: pulpo-bob 0.55s ease-in-out infinite;
+}
 
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
 

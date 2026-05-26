@@ -2,6 +2,86 @@
 
 import Image from 'next/image';
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+
+// ─── Pulpo Mascot (green-screen chroma key via canvas) ────────────────────────
+function PulpoMascot() {
+  const videoRef  = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const walkerRef = useRef<HTMLDivElement>(null);
+  const wrapRef   = useRef<HTMLDivElement>(null);
+  const rafRef    = useRef<number>(0);
+
+  useEffect(() => {
+    const video  = videoRef.current;
+    const canvas = canvasRef.current;
+    const walker = walkerRef.current;
+    const wrap   = wrapRef.current;
+    if (!video || !canvas || !walker || !wrap) return;
+
+    canvas.width  = 0;
+    canvas.height = 0;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    const SPEED = 60; // px per second
+    let x = 0;
+    let dir = 1; // 1 = right, -1 = left
+    let prev = 0;
+
+    function tick(ts: number) {
+      const dt = prev ? Math.min((ts - prev) / 1000, 0.1) : 0;
+      prev = ts;
+
+      const canvasW = canvas!.offsetWidth || 0;
+      const travel  = Math.max(0, wrap!.offsetWidth - canvasW);
+
+      x += dir * SPEED * dt;
+      if (x >= travel) { x = travel; dir = -1; }
+      if (x <= 0)      { x = 0;      dir =  1; }
+
+      walker!.style.transform = `translateX(${x}px) scaleX(${dir === -1 ? -1 : 1})`;
+
+      // Chroma-key frame
+      if (!video!.paused && !video!.ended && canvas!.width > 0) {
+        ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+        ctx!.drawImage(video!, 0, 0, canvas!.width, canvas!.height);
+        const frame = ctx!.getImageData(0, 0, canvas!.width, canvas!.height);
+        const d = frame.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i], g = d[i + 1], b = d[i + 2];
+          if (g > 90 && g > r * 1.35 && g > b * 1.35) d[i + 3] = 0;
+        }
+        ctx!.putImageData(frame, 0, 0);
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    }
+
+    function onMeta() {
+      canvas!.width  = video!.videoWidth  || 320;
+      canvas!.height = video!.videoHeight || 240;
+    }
+
+    video.addEventListener('loadedmetadata', onMeta);
+    video.play().catch(() => {});
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      video.removeEventListener('loadedmetadata', onMeta);
+    };
+  }, []);
+
+  return (
+    <div className="pulpo-mascot" ref={wrapRef}>
+      <video ref={videoRef} src="/pulpo.mp4" loop muted playsInline style={{ display: 'none' }} />
+      <div className="pulpo-walker" ref={walkerRef}>
+        <canvas ref={canvasRef} className="pulpo-canvas" />
+      </div>
+    </div>
+  );
+}
 import type { DashboardAlert, AlertTipo, ClosureListItem, Severity } from '../lib/types';
 import { fmtMoney, fmtNum, fmtDate } from '../lib/format';
 import { listRecentClosures, getLocalReport } from '../lib/api';
@@ -438,6 +518,7 @@ export default function AlertDashboard() {
         <nav className="nav">
           <a href="#" className="active">Alertas</a>
         </nav>
+        <PulpoMascot />
         <div className="topbar-right">
           <div className="search">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5">
