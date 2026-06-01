@@ -77,7 +77,6 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
 .nav a:hover { background: rgba(255,255,255,0.1); color: white; }
 .nav a.active { background: var(--olive-700); color: white; }
 .topbar-right {
-  margin-left: auto;
   display: flex; align-items: center; gap: 14px;
 }
 .search {
@@ -559,6 +558,128 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
   z-index: 200;
 }
 .toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ─── Pulpo Mascot ────────────────────────────────────────────────────────── */
+
+@keyframes pulpo-bob {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-4px); }
+}
+
+.pulpo-mascot {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  align-self: stretch;
+  pointer-events: none;
+}
+
+.pulpo-walker {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.pulpo-canvas {
+  display: block;
+  height: 56px;
+  width: auto;
+  animation: pulpo-bob 0.55s ease-in-out infinite;
+}
+
+/* Cage bars drop over the pulpo */
+.pulpo-cage {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent        0px,
+    transparent        7px,
+    rgba(30,15,0,0.82) 7px,
+    rgba(30,15,0,0.82) 11px
+  );
+  border: 3px solid rgba(30,15,0,0.85);
+  border-top: 5px solid rgba(30,15,0,0.9);
+  pointer-events: none;
+  animation: cage-drop 0.25s ease-out;
+  z-index: 2;
+}
+
+@keyframes cage-drop {
+  from { transform: translateY(-110%); }
+  to   { transform: translateY(0); }
+}
+
+/* Shake canvas while caged */
+.pulpo-walker.caged .pulpo-canvas {
+  animation: pulpo-bob 0.55s ease-in-out infinite,
+             pulpo-shake 0.35s ease-in-out infinite;
+}
+
+@keyframes pulpo-shake {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-3px); }
+  75%       { transform: translateX(3px); }
+}
+
+/* Cage bubble is orange-tinted */
+.pulpo-bubble.caged {
+  border-color: var(--amber);
+  color: #7C3500;
+  background: var(--amber-50);
+}
+.pulpo-bubble.caged::before { border-bottom-color: var(--amber); }
+.pulpo-bubble.caged::after  { border-bottom-color: var(--amber-50); }
+
+.pulpo-bubble {
+  position: absolute;
+  top: calc(100% + 10px);  /* below the topbar */
+  /* left is set by JS to clamp within container */
+  background: white;
+  color: var(--ink-900);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 13px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  width: 210px;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.13);
+  white-space: normal;
+  z-index: 200;
+  animation: bubble-in 0.18s ease-out;
+  pointer-events: none;
+}
+
+/* Arrow pointing up toward the pulpo */
+.pulpo-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 8px solid transparent;
+  border-bottom-color: var(--border);
+}
+
+.pulpo-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: calc(100% - 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-bottom-color: white;
+}
+
+@keyframes bubble-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1); }
+}
 
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
 

@@ -2,6 +2,179 @@
 
 import Image from 'next/image';
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+
+const PULPO_JOKES = [
+  '¿Por qué el pulpo es el mejor auditor? ¡Tiene ocho brazos para revisar ocho almacenes al mismo tiempo!',
+  'El pulpo encontró un faltante de calamares. Obvio… se los comió él.',
+  '¿Qué le dijo el pulpo al inventario? "Contigo tengo todo bien agarrado."',
+  'Un pulpo en una auditoría es imparable: firma, revisa, sella, calcula, apunta, archiva, reporta… ¡y todavía le sobra un tentáculo!',
+  '¿Por qué el pulpo no usa Excel? Porque con ocho manos prefiere ocho hojas de cálculo.',
+  'El pulpo dice: "Yo no tengo discrepancias… solo tentáculos con criterio propio."',
+  '¿Sabes por qué el pulpo es bueno en TALOS? Detecta anomalías con todos sus sentidos… ¡y son muchos!',
+  '¿Por qué el pulpo nunca pierde la cuenta? Porque tiene ocho dedos y ningún jefe.',
+  'El pulpo intentó hacer home office. Falló: necesitaba ocho monitores y solo tenía uno.',
+  '¿Qué hace el pulpo cuando hay sobrante? Lo abraza con los ocho tentáculos y dice: "Este ya es mío."',
+  '¿Cómo saluda el pulpo? "¡Hola, hola, hola, hola, hola, hola, hola, hola!"',
+  'El pulpo pidió aumento. El jefe dijo que no. El pulpo apretó el botón de renuncia… ocho veces.',
+];
+
+const CAGE_MESSAGES = [
+  '¡AUXILIO! ¡Me roban! ¡Haz clic para liberarme!',
+  '¡No es justo! ¡Yo solo quería revisar los sobrantes! ¡Sácame de aquí!',
+  '¡Soy inocente! ¡El faltante no fui yo… bueno, no todo! ¡Clic para salir!',
+];
+
+const FREE_MESSAGES = [
+  '¡Gracias, héroe! ¡El inventario está a salvo!',
+];
+
+// ─── Pulpo Mascot (green-screen chroma key via canvas) ────────────────────────
+function PulpoMascot() {
+  const videoRef     = useRef<HTMLVideoElement>(null);
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const walkerRef    = useRef<HTMLDivElement>(null);
+  const wrapRef      = useRef<HTMLDivElement>(null);
+  const bubbleRef    = useRef<HTMLDivElement>(null);
+  const rafRef       = useRef<number>(0);
+  const timerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pausedRef    = useRef(false);
+  const cagedRef     = useRef(false);
+  const [joke,  setJoke]  = useState<string | null>(null);
+  const [caged, setCaged] = useState(false);
+
+  useEffect(() => { pausedRef.current = caged || !!joke; }, [caged, joke]);
+  useEffect(() => { cagedRef.current  = caged; }, [caged]);
+
+  const scheduleCage = useCallback(() => {
+    if (cageTimerRef.current) clearTimeout(cageTimerRef.current);
+    const delay = 20000 + Math.random() * 25000; // 20–45 s
+    cageTimerRef.current = setTimeout(() => setCaged(true), delay);
+  }, []);
+
+  // Kick off first cage timer on mount
+  useEffect(() => {
+    scheduleCage();
+    return () => { if (cageTimerRef.current) clearTimeout(cageTimerRef.current); };
+  }, [scheduleCage]);
+
+  // Show cage message as soon as caged
+  useEffect(() => {
+    if (!caged) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setJoke(CAGE_MESSAGES[Math.floor(Math.random() * CAGE_MESSAGES.length)]);
+    // no auto-dismiss while caged — user must click
+  }, [caged]);
+
+  function handleClick() {
+    if (cagedRef.current) {
+      // Free the pulpo
+      setCaged(false);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setJoke(FREE_MESSAGES[Math.floor(Math.random() * FREE_MESSAGES.length)]);
+      timerRef.current = setTimeout(() => {
+        setJoke(null);
+        scheduleCage();
+      }, 3000);
+      return;
+    }
+    // Tell a joke
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setJoke(PULPO_JOKES[Math.floor(Math.random() * PULPO_JOKES.length)]);
+    timerRef.current = setTimeout(() => setJoke(null), 5000);
+  }
+
+  useEffect(() => {
+    const video  = videoRef.current;
+    const canvas = canvasRef.current;
+    const walker = walkerRef.current;
+    const wrap   = wrapRef.current;
+    if (!video || !canvas || !walker || !wrap) return;
+
+    canvas.width  = 0;
+    canvas.height = 0;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    const SPEED = 60;
+    let x = 0;
+    let dir = 1;
+    let prev = 0;
+
+    function tick(ts: number) {
+      const dt = prev ? Math.min((ts - prev) / 1000, 0.1) : 0;
+      prev = ts;
+
+      const canvasW = canvas!.offsetWidth || 0;
+      const travel  = Math.max(0, wrap!.offsetWidth - canvasW);
+
+      if (!pausedRef.current) {
+        x += dir * SPEED * dt;
+        if (x >= travel) { x = travel; dir = -1; }
+        if (x <= 0)      { x = 0;      dir =  1; }
+        walker!.style.transform = `translateX(${x}px) scaleX(${dir === -1 ? -1 : 1})`;
+      }
+
+      // Clamp bubble horizontally so it never leaves the container
+      const bubble = bubbleRef.current;
+      if (bubble) {
+        const bw      = bubble.offsetWidth || 210;
+        const center  = x + canvasW / 2;
+        const clamped = Math.max(bw / 2, Math.min(wrap!.offsetWidth - bw / 2, center));
+        bubble.style.left      = `${clamped}px`;
+        bubble.style.transform = 'translateX(-50%)';
+      }
+
+      // Chroma-key frame
+      if (!video!.paused && !video!.ended && canvas!.width > 0) {
+        ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+        ctx!.drawImage(video!, 0, 0, canvas!.width, canvas!.height);
+        const frame = ctx!.getImageData(0, 0, canvas!.width, canvas!.height);
+        const d = frame.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i], g = d[i + 1], b = d[i + 2];
+          if (g > 90 && g > r * 1.35 && g > b * 1.35) d[i + 3] = 0;
+        }
+        ctx!.putImageData(frame, 0, 0);
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    }
+
+    function onMeta() {
+      canvas!.width  = video!.videoWidth  || 320;
+      canvas!.height = video!.videoHeight || 240;
+    }
+
+    video.addEventListener('loadedmetadata', onMeta);
+    video.play().catch(() => {});
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      video.removeEventListener('loadedmetadata', onMeta);
+    };
+  }, []);
+
+  return (
+    <div className="pulpo-mascot" ref={wrapRef}>
+      <video ref={videoRef} src="/pulpo.mp4" loop muted playsInline style={{ display: 'none' }} />
+      <div
+        className={`pulpo-walker${caged ? ' caged' : ''}`}
+        ref={walkerRef}
+        onClick={handleClick}
+        style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+      >
+        {caged && <div className="pulpo-cage" />}
+        <canvas ref={canvasRef} className="pulpo-canvas" />
+      </div>
+      {joke && (
+        <div className={`pulpo-bubble${caged ? ' caged' : ''}`} ref={bubbleRef}>{joke}</div>
+      )}
+    </div>
+  );
+}
 import type { DashboardAlert, AlertTipo, ClosureListItem, Severity } from '../lib/types';
 import { fmtMoney, fmtNum, fmtDate } from '../lib/format';
 import { listRecentClosures, getLocalReport } from '../lib/api';
@@ -9,6 +182,7 @@ import { mapFindings } from '../lib/mapFindings';
 
 type FilterTipo = AlertTipo | 'all' | 'resolved';
 type FilterSeverity = Severity | 'all';
+type FilterCategory = string | 'all';
 type SortBy = 'score' | 'mxn' | 'diff';
 
 const TIPO_LABEL: Record<AlertTipo | 'resolved', string> = {
@@ -296,6 +470,7 @@ export default function AlertDashboard() {
 
   const [filterTipo, setFilterTipo] = useState<FilterTipo>('all');
   const [filterSeverity, setFilterSeverity] = useState<FilterSeverity>('all');
+  const [filterCategory, setFilterCategory] = useState<FilterCategory>('all');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('score');
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
@@ -335,6 +510,7 @@ export default function AlertDashboard() {
         setRevisadas(new Set());
         setFilterTipo('all');
         setFilterSeverity('all');
+        setFilterCategory('all');
       })
       .catch(e => setError(String(e.message)))
       .finally(() => setLoading(false));
@@ -347,6 +523,12 @@ export default function AlertDashboard() {
     }
   }, [selectedAlertId]);
 
+  // Unique categories sorted alphabetically
+  const categories = useMemo(() => {
+    const set = new Set(alerts.map(a => a.producto_cat_nombre).filter(Boolean));
+    return Array.from(set).sort();
+  }, [alerts]);
+
   // Filtered + sorted alerts
   const visible = useMemo(() => {
     return alerts
@@ -356,6 +538,7 @@ export default function AlertDashboard() {
         if (isResolved) return false;
         if (filterTipo !== 'all' && a.tipo !== filterTipo) return false;
         if (filterSeverity !== 'all' && a.severity_label !== filterSeverity) return false;
+        if (filterCategory !== 'all' && a.producto_cat_nombre !== filterCategory) return false;
         if (search) {
           const q = search.toLowerCase();
           return a.producto_nombre.toLowerCase().includes(q) || a.message.toLowerCase().includes(q);
@@ -367,7 +550,7 @@ export default function AlertDashboard() {
         if (sortBy === 'mxn') return Math.abs(b.difimporte) - Math.abs(a.difimporte);
         return Math.abs(b.diferencia) - Math.abs(a.diferencia);
       });
-  }, [alerts, filterTipo, filterSeverity, search, sortBy, revisadas]);
+  }, [alerts, filterTipo, filterSeverity, filterCategory, search, sortBy, revisadas]);
 
   const selectedAlert = useMemo(
     () => alerts.find(a => a.id === selectedAlertId) ?? null,
@@ -428,6 +611,7 @@ export default function AlertDashboard() {
         <nav className="nav">
           <a href="#" className="active">Alertas</a>
         </nav>
+        <PulpoMascot />
         <div className="topbar-right">
           <div className="search">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5">
@@ -529,6 +713,29 @@ export default function AlertDashboard() {
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              <div className="filter-group">
+                <p className="filter-label">Categoría</p>
+                <div className="chip-row">
+                  <button
+                    className={`chip${filterCategory === 'all' ? ' active' : ''}`}
+                    onClick={() => setFilterCategory('all')}
+                  >
+                    Todas
+                    <span className="count">{alerts.length}</span>
+                  </button>
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      className={`chip${filterCategory === cat ? ' active' : ''}`}
+                      onClick={() => setFilterCategory(cat)}
+                    >
+                      {cat}
+                      <span className="count">{alerts.filter(a => a.producto_cat_nombre === cat).length}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
