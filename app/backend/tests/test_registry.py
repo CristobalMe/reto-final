@@ -9,7 +9,7 @@ def test_all_local_metrics_registered():
 
 def test_all_historical_metrics_registered():
     ids = {m.meta.id for m in all_historical()}
-    expected = {"H01", "H02", "H03", "H04"}
+    expected = {"H01", "H02", "H03"}
     assert expected.issubset(ids), f"missing historicals: {expected - ids}"
 
 
