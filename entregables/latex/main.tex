@@ -1,0 +1,272 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{amsmath} 
+\geometry{margin=1in}
+
+\title{Reporte: Copiloto Talos}
+\author{Cristobal Medina Meza, Gabriel Eduardo Meléndez Zavala, Santiago Mora Cruz,\\Karla Munguía Romero, Gabriel Reynoso Escamilla, Guillermo Villegas Morales}
+\date{2 de Junio de 2026}
+
+\begin{document}
+\maketitle
+
+\section*{Planteamiento del Problema y Objetivo}
+AERSA es una empresa de consultoría y tecnológia enfocada a negocios gastronómicos. Entre sus servicios se encuentra \textit{Talos} una plataforma de administración para restaurantes que, aunque no limitada a eso, lleva el inventario de cada local. 
+
+Los \textit{stakeholders} de AERSA reportan que los cierres de semana que genera la plataforma sulen ser pasados por alto por los encargados o auditores internos de cada restaurante. Este puede llevar a mala administración y perdidas para el dueño del negocio.
+
+\textbf{Copiloto Talos} es una propuesta para facilitar la detección rápida de anomalías en los cierres de inventario de Talos mediante un módulo de reportaje de incidentes y visualización de métricas. El concepto central es un \textit{dashboard} dinámico de alertas generado por agente, donde el servicio \textit{¿Dónde está mi pulpo?} recibe información desde la base de datos de Talos y produce una lista priorizada de alertas junto con gráficas que explican cada hallazgo.
+
+El objetivo de este copiloto es facilitar la detección rápida de anomalías mediante reportes de incidentes y la visualización de metricas, priorizando alertas por su impacto financiero y operativo, y ofreciendo una vista ejecutiva y una a detalle por producto y cierre.
+
+\section*{Alcance}
+
+El alcance cubre reglas de dedo para detección puntual y reglas dinámicas (históricas) para patrones recurrentes, además de la visualización en el display de alertas, la generación de reportes de alertas para seguimiento operativo y A/B testing para validar cambios. Como \textit{stretch goals} se consideran un dashboard autoajustable, un modelo en ensamble para mejorar la detección y la asignación de responsables por hallazgo.
+
+
+\section*{Metodología}
+La metodología se organiza en un flujo end-to-end que combina reglas locales y análisis histórico:
+\begin{enumerate}
+  \item \textbf{Ingesta y preparación de datos}: se consultan cierres y detalle desde MySQL (\texttt{inventariomes} e \texttt{inventariomesdetalle}), y se normalizan campos clave (stock inicial, teórico y físico, diferencia, importe, costo promedio y movimientos).
+  \item \textbf{Ejecución de métricas históricas}: se analizan cierres de una sucursal en ventanas temporales para identificar faltantes recurrentes (H01), cierres outliers con z-score (H02) y concentración de variancias por auditor o autocierre (H03).
+  \item \textbf{Ejecución de métricas locales}: se aplican reglas por producto (R01--R11) y una regla de cabecera de control (segregación de funciones) para detectar faltantes, sobrantes, variaciones porcentuales, consumos no registrados, compras sin consumo, ajustes manuales altos, devoluciones/mermas excesivas, conteos faltantes o redondos y costos anómalos.
+  \item \textbf{Generación de hallazgos}: cada regla produce un hallazgo con severidad, categoría, valor en MXN, porcentaje de variación y metadatos explicativos.
+  \item \textbf{Priorización y resúmenes}: se calcula un puntaje de prioridad en el rango [0, 1] ponderando impacto monetario, severidad y señales adicionales (recurrencia o variación). Además, se generan resúmenes por severidad y por categoría.
+  \item \textbf{Exposición y visualización}: el backend entrega reportes locales e históricos vía API; el frontend consume los reportes para construir el tablero de alertas, filtros y paneles de detalle.
+
+\end{enumerate}
+
+\subsection*{Métricas Históricas (H01--H03)}
+
+Para la modelación de las métricas históricas, se definen las siguientes variables:
+
+\begin{itemize}
+    \item \(r\) = longitud de la racha de faltantes consecutivos más reciente
+    \item \(N\) (o \(n_{min}\)) = mínimo requerido para evaluar/alertar
+    \item \(U\) = umbral específico de cada métrica (p. ej., \(U_{faltante\_min}\), \(U_{z\_alto}\), \(U_{z\_crit}\), \(U_{auto}\))
+    \item \(P\) = proporción/porcentaje (p. ej., \(P_{auto}\) de autocierres).
+\end{itemize}
+
+\begin{enumerate}
+  \item \textbf{H01 - Faltante recurrente}
+
+        Detecta rachas de faltantes consecutivos en una sucursal. Se considera faltante cuando la diferencia en MXN ($DI$) es menor o igual a un umbral negativo; si la racha reciente cumple el mínimo de cierres, se levanta alerta. El impacto se calcula como la suma de $DI$ en la racha.
+        \\
+        \textbf{Cálculo:}
+        \[
+        \text{Alerta} = \begin{cases}
+        \text{Severidad: CRÍTICA} & \text{si } r \ge N \land DI_t \le U_{faltante\_min} \text{ en los } r \text{ cierres más recientes} \\
+        \text{No aplica} & \text{en cualquier otro caso}
+        \end{cases}
+        \]
+        \textit{Umbrales por defecto:} $N=3$ cierres consecutivos, $U_{faltante\_min} = -\$100$.
+
+  \item \textbf{H02 - Z-score de cierres}
+
+        Identifica cierres atípicos comparando el faltante de cada cierre contra el histórico de la misma sucursal. Se requiere un mínimo de cierres y una desviación estándar distinta de cero para calcular el z-score.
+        \\
+        \textbf{Cálculo:}
+        \[
+        z = \frac{F_i - \mu}{\sigma}
+        \]
+        \[
+        \text{Alerta} = \begin{cases}
+        \text{Severidad: CRÍTICA} & \text{si } |z| \ge U_{z\_crit} \\
+        \text{Severidad: ALTA} & \text{si } U_{z\_alto} \le |z| < U_{z\_crit} \\
+        \text{No aplica} & \text{en cualquier otro caso}
+        \end{cases}
+        \]
+        \textit{Umbrales por defecto:} $U_{z\_alto}=2.0$, $U_{z\_crit}=3.0$, $n_{min}=6$ cierres y $\sigma > 0$.
+
+  \item \textbf{H03 - Concentración por auditor / autocierre}
+
+        Evalúa si un auditor concentra faltantes de forma anómala (z-score del promedio por auditor) y si existe una proporción elevada de autocierres. Se calcula solo para auditores con historial suficiente.
+        \\
+        \textbf{Cálculo:}
+        \[
+        z_a = \frac{\overline{F}_a - \mu}{\sigma}
+        \]
+        \[
+        \text{Alerta} = \begin{cases}
+        \text{Severidad: CRÍTICA} & \text{si } P_{auto} \ge U_{auto} \\
+        \text{Severidad: ALTA} & \text{si } |z_a| \ge U_{z} \\
+        \text{No aplica} & \text{en cualquier otro caso}
+        \end{cases}
+        \]
+        \textit{Umbrales por defecto:} $U_{auto}=0.5$, $U_{z}=1.5$, $N_{min}=3$ cierres por auditor.
+\end{enumerate}
+
+  \subsection*{Reglas de Detección de Anomalías}
+  Para la modelación de los cálculos de las reglas, se definen las siguientes variables procedentes del flujo de datos:
+\begin{itemize}
+    \item $DI$: Diferencia en importe monetario (\texttt{difimporte}).
+    \item $D$: Diferencia física en unidades (\texttt{diferencia}).
+    \item $CP$: Costo promedio ponderado del producto (\texttt{costopromedio}).
+    \item $ST$: Inventario o stock teórico contable (\texttt{stockteorico}).
+    \item $SI$: Inventario o stock inicial del periodo (\texttt{stockinicial}).
+    \item $SF$: Conteo físico de inventario (\texttt{stockfisico}).
+    \item $EV$: Egreso de inventario por concepto de ventas (\texttt{egresoventa}).
+    \item $IC$: Ingreso de inventario por concepto de compras (\texttt{ingresocompra}).
+    \item $RM$: Ajuste o reajuste manual de inventario (\texttt{reajuste}).
+    \item $ED$: Egreso de inventario por devolución o merma (\texttt{egresodevolucion}).
+    \item $M_{act}$: Movimiento acumulado del periodo, definido como:
+    \[ M_{act} = \texttt{ingresocompra} + \texttt{ingresorequisicion} + \texttt{egresoventa} + \texttt{egresorequisicion} \]
+\end{itemize}
+
+\begin{enumerate}
+
+    % R01
+    \item \textbf{R01 - Faltante Significativo}
+    
+        Un valor negativo en el diferencial físico implica la ausencia no justificada de mercancía. Si el producto no cuenta con un costo promedio parametrizado ($CP = 0$), el sistema asume la imposibilidad de evaluar el impacto financiero real y degrada o tipifica la alerta por defecto en unidades físicas. Si existe costo ($CP > 0$), se contrasta el impacto contra los límites financieros de la categoría correspondiente ($U_{crit}$, $U_{alto}$).
+        \\
+        \textbf{Cálculo:}
+        \[
+        \text{Alerta} = \begin{cases} 
+        \text{Severidad: ALTA} & \text{si } CP = 0 \land D < 0 \\
+        \text{Severidad: CRÍTICA} & \text{si } CP > 0 \land DI \le U_{crit} \\
+        \text{Severidad: ALTA} & \text{si } CP > 0 \land U_{crit} < DI \le U_{alto} \\
+        \text{No aplica} & \text{en cualquier otro caso}
+        \end{cases}
+        \]
+        \textit{Umbrales por defecto ($U_{crit} / U_{alto}$):} Bebidas (-\$2,000 / -\$500), Alimentos (-\$3,000 / -\$800), Gastos (-\$5,000 / -\$1,500).
+
+    % R02
+    \item \textbf{R02 - Sobrante Significativo}
+    
+         Un excedente de inventario físico indica fallas potenciales en el registro de capturas, recepciones ciegas o errores en los conteos de cierres previos. Al igual que R01, la ausencia de costo mapeado reconduce la regla a una evaluación puramente volumétrica con severidad preventiva.
+         \\
+        \textbf{Cálculo:}
+        \[
+        \text{Alerta} = \begin{cases} 
+        \text{Severidad: MEDIA} & \text{si } CP = 0 \land D > 0 \\
+        \text{Severidad: ALTA} & \text{si } CP > 0 \land DI \ge U_{sobrante\_alto} \\
+        \text{No aplica} & \text{en cualquier otro caso}
+        \end{cases}
+        \]
+        \textit{Umbral por defecto ($U_{sobrante\_alto}$):} Bebidas (\$500), Alimentos (\$800), Gastos (\$1,500).
+    
+
+    % R03
+    \item \textbf{R03 - Variación Porcentual Alta}
+         Mide la proporción de la desviación con respecto al tamaño del inventario teórico esperado. Para mitigar falsos positivos provocados por denominadores asintóticos a cero (divisiones entre valores ínfimos), la regla se restringe a registros con un volumen base significativo ($|ST| \ge 1.0$) y una variación física representativa ($|D| \ge 0.5$). Asimismo, variaciones absurdas ($|\text{Var\%}| > 10,000\%$) se descartan al presumirse corrupción u omisión de datos de origen.
+         \\
+        \textbf{Cálculo:}
+        \[ \text{Var\%} = \left( \frac{D}{ST} \right) \times 100 \]
+        Se dispara una alerta de severidad \textbf{ALTA} si se cumplen de forma simultánea las siguientes condiciones:
+        \[ \left( |ST| \ge 1.0 \right) \land \left( |D| \ge 0.5 \right) \land \left( 15.0\% < |\text{Var\%}| \le 10,000\% \right) \]
+
+    % R04
+    \item \textbf{R04 - Sin Ventas con Movimiento}
+    
+         Detecta escenarios donde el inventario del producto disminuye según los movimientos del libro contable, pero no se visualiza un reflejo de contraprestación comercial directa en los sistemas de punto de venta ($EV = 0$). Es un indicador de posible consumo interno no registrado, mermas ocultas o desvío de mercancía.
+         \\
+        \textbf{Cálculo:}
+        Anomalía detectada con severidad \textbf{MEDIA} si:
+        \[ (EV = 0) \land (SI - ST > 0) \land (D < 0) \]
+    
+
+    % R05
+    \item \textbf{R05 - Compra sin Consumo}
+    
+         Identifica ineficiencias en el abastecimiento o sobre-almacenamiento. Si se efectúa un ingreso por compra, se espera que el producto registre un flujo comercial proporcional durante el periodo analizado. Un índice de consumo excesivamente bajo delata stock estancado o errores de captura en la recepción de mercancía.
+         \\
+        \textbf{Cálculo:}
+        \[ \text{Consumo\%} = \left( \frac{EV}{IC} \right) \times 100 \]
+        Se genera una alerta de severidad \textbf{MEDIA} si:
+        \[ (IC > 0) \land (\text{Consumo\%} < 5.0\%) \]
+    
+
+    % R06
+    \item \textbf{R06 - Reajuste Manual Elevado}
+         Los ajustes manuales directos sobre el stock teórico representan correcciones administrativas excepcionales. Modificaciones con un peso porcentual elevado en relación al volumen de inventario habitual sugieren vulnerabilidades en el control de accesos del sistema o la regularización forzada de incidencias graves.
+         \\
+        \textbf{Cálculo:}
+        \[ \text{Reajuste\%} = \begin{cases} 
+        \left| \frac{RM}{ST} \right| \times 100 & \text{si } ST \neq 0 \\
+        \infty & \text{si } ST = 0 
+        \end{cases} \]
+        Se emite una alerta de severidad \textbf{ALTA} si:
+        \[ (RM \neq 0) \land \left( \text{Reajuste\%} \ge 10.0\% \lor \text{is\_nan}(\text{Reajuste\%}) \right) \]
+    
+
+    % R07
+    \item \textbf{R07 - Faltante Recurrente}
+    
+         Evalúa la persistencia temporal de pérdidas en un mismo producto a lo largo de ciclos sucesivos. Esta regla depende de la inyección de un DataFrame histórico complementario (\texttt{df\_history}). Su objetivo es aislar problemas endémicos de robo hormiga, problemas con proveedores o fallas crónicas de receta/porción.
+         \\
+        \textbf{Cálculo:} Sea $D_{t}$ la diferencia física detectada en el cierre actual, y $D_{t-1}, D_{t-2}, \dots, D_{t-N}$ las diferencias correspondientes a los cierres cronológicos inmediatos anteriores. 
+        Se genera una alerta de severidad \textbf{CRÍTICA} si:
+        \[ \forall \, k \in \{t-1, t-2, \dots, t-3\}, \quad D_{k} < 0 \]
+        \textit{Nota:} El parámetro por defecto requiere un mínimo de $N = 3$ cierres previos consecutivos con faltantes activos.
+    
+
+    % R08
+    \item \textbf{R08 - Merma Excesiva}
+    
+         Controla el volumen de bajas operativas por concepto de mermas o devoluciones en relación directa con la disponibilidad teórica. Exceder los límites normales denota deficiencias agudas en la cadena de frío, mala rotación de caducidades, manipulación incorrecta o potencial fraude en transacciones de devolución.
+         \\
+        \textbf{Cálculo:}
+        \[ \text{Merma\%} = \left( \frac{ED}{ST} \right) \times 100 \]
+        Se gatilla una alerta de severidad \textbf{ALTA} si se cumple la condición:
+        \[ (ED > 0) \land (ST > 0) \land (\text{Merma\%} > 5.0\%) \]
+    
+
+    % R09
+    \item \textbf{R09 - Bebida de Alto Valor con Faltante}
+         Debido a sus altos márgenes de contribución financiera y susceptibilidad intrínseca al desvío informal o consumo no autorizado, la subcategoría de líquidos de bar ("Bebidas") es aislada bajo una regla de alta sensibilidad monetaria, aplicando un filtro nominal estricto para mitigar el riesgo oportunista.
+         \\
+        \textbf{Cálculo:}
+        Se identifica una desviación de severidad CRÍTICA si el producto pertenece a la familia de bebidas y su impacto en valor satisface la condición:
+        \[ (\texttt{"Beb"} \in \text{Categoría}) \land (DI < -500 \text{ MXN}) \]
+    
+
+    % R10
+    \item \textbf{R10 - Sin Conteo Físico}
+    
+
+         Evita la omisión deliberada o accidental de inventarios físicos al finalizar los ciclos semanales. Para prevenir falsos positivos derivados de códigos de producto descontinuados, inactivos o estacionales, la regla exige de forma mandatoria la presencia de un stock teórico base mínimo ($ST \ge 5.0$) acompañado de dinamismo operativo evidenciado por cualquier tipo de transacción en el periodo ($M_{act} > 0$).
+         \\
+        \textbf{Cálculo:}
+        Se estructura una alerta de severidad \textbf{MEDIA} bajo el cumplimiento estricto del siguiente entorno lógico:
+        \[ (SF = 0) \land (ST \ge 5.0) \land (M_{act} > 0) \]
+
+\end{enumerate}
+
+\section*{Resultados}
+Se consolidó un catálogo de 14 métricas con severidades CRÍTICA, ALTA y MEDIA, cubriendo anomalías locales e históricas y generando reportes accionables para operación y auditoría.
+
+\subsection*{Infraestructura Tecnológica}
+El motor de métricas integra reglas locales e históricas y produce un reporte local completo con encabezado del cierre, hallazgos priorizados, resúmenes por severidad y por categoría, además de contexto por producto. En paralelo, el reporte histórico por sucursal calcula hallazgos en ventanas temporales, indicando el número de cierres analizados y agregando resúmenes por periodo. La priorización cuantitativa se resuelve con un \textit{scoring} que combina impacto monetario, severidad y señales como recurrencia o variación porcentual, permitiendo ordenar alertas con criterios consistentes. El catálogo de reglas y umbrales queda documentado en el módulo de métricas para asegurar trazabilidad y facilitar calibraciones futuras.
+
+\subsection*{Interfaz de Usuario y Despliegue}
+El frontend consolida un dashboard operativo que muestra alertas con filtros por severidad, categoría y prioridad, y ofrece un panel de detalle por producto con gráficas y explicaciones. Esta capa de visualización permite navegar de lo general a lo específico y habilita el análisis rápido de discrepancias por categoría o por producto.
+
+Adicional a esto, se rentó el dominio \texttt{dondeestamipulpo.lat} el cual redirige a la plataforma de la solución que se encuentra montada en el servicio de \textit{cloud} que ofrece \textit{SpaceShip}. De esta manera, la plataforma se encuentra accesible para los usuarios con las credenciales dadas.
+
+\subsection*{Incorporación al Sistema Existente de \textit{Talos}}
+Los reportes locales e históricos se exponen vía API para integrarse al flujo de cierres existente en \textit{Talos}, manteniendo continuidad operativa. La salida estructurada facilita su consumo por procesos internos de seguimiento y auditoría, y la documentación de reglas/umbrales respalda ajustes controlados conforme cambian políticas o contextos de negocio.
+
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.75\linewidth]{arquitectura.png}
+    \caption{Arquitectura del dashboard: cliente, \textit{Talos} y \textit{¿Dónde está mi pulpo?}}
+    \label{fig:arquitectura}
+\end{figure}
+
+
+\section*{Análisis}
+El diseño basado en reglas ofrece explicabilidad inmediata, un atributo clave en auditoría, y permite priorizar rápidamente el esfuerzo hacia las discrepancias con mayor impacto financiero. La separación entre métricas locales e históricas agrega contexto temporal: las reglas locales detectan eventos puntuales, mientras que las históricas revelan patrones persistentes (p. ej., recurrencia de faltantes o concentración por auditor).
+
+La incorporación de un puntaje unificado mejora la toma de decisiones al combinar severidad, impacto y señales adicionales; sin embargo, su efectividad depende de la calidad de datos y de la calibración de umbrales por categoría. Las métricas históricas requieren un mínimo de cierres para ser estadísticamente confiables, por lo que la cobertura puede ser limitada en sucursales con poca historia. En conjunto, el enfoque es robusto para detección rápida y trazable, aunque debe complementarse con ajustes periódicos de parámetros y validación en campo para reducir falsos positivos y mejorar la sensibilidad a nuevos patrones.
+
+\section*{Trabajo futuro}
+Estas extensiones estratégicas maximizan el valor del ecosistema al transformar la detección de anomalías en un proceso adaptativo y plenamente accionable. Por un lado, la implementación de un dashboard autoajustable sustentado en un ensamble de modelos perfecciona la infraestructura tecnológica de la plataforma; este enfoque analítico avanzado refina los criterios del \textit{scoring} cuantitativo, permitiendo que el sistema aprenda de cierres previos para calibrar dinámicamente los umbrales, reduciendo falsos positivos y elevando la calidad de los hallazgos priorizados. Por otro lado, la capacidad de asignar responsables específicos a cada alerta robustece la interfaz de usuario y complementa la integración vía API con \textit{Talos}. Al vincular un usuario a una discrepancia detectada en la nube (\texttt{dondeestamipulpo.lat}), el reporte deja de ser un diagnóstico estático y se convierte en una herramienta de gestión activa, cerrando el ciclo operativo mediante el seguimiento, la auditoría y la resolución oportuna de las pérdidas en la sucursal.
+
+\end{document}
