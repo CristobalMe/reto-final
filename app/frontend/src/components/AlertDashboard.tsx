@@ -196,7 +196,7 @@ const TIPO_LABEL: Record<AlertTipo | 'resolved', string> = {
 const SEV_ORDER: Record<Severity, number> = { CRITICA: 4, ALTA: 3, MEDIA: 2, BAJA: 1 };
 
 // ─── Donut ────────────────────────────────────────────────────────────────────
-function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas: Set<string> }) {
+function DonutChart({ alerts, revisadas, abOptOut }: { alerts: DashboardAlert[]; revisadas: Set<string>; abOptOut: boolean }) {
   const { resolved, containerProps } = useAutoAB('donut-stroke', {
     dimensions: {
       size: ['small', 'medium', 'large'],
@@ -211,8 +211,8 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
   };
   const total = counts.loss + counts.surplus + counts.missing;
   const size = 180;
-  const strokeW = resolved.config.size === 'large' ? 30 : resolved.config.size === 'small' ? 18 : 24;
-  const centerFs = Number(resolved.config.fontSize) || 16;
+  const strokeW = abOptOut ? 24 : (resolved.config.size === 'large' ? 30 : resolved.config.size === 'small' ? 18 : 24);
+  const centerFs = abOptOut ? undefined : (Number(resolved.config.fontSize) || 16);
   // Keep the stroke fully inside the SVG bounds to avoid clipping the ring edges.
   const r = (size - strokeW) / 2, cx = size / 2, cy = size / 2;
   const circ = 2 * Math.PI * r;
@@ -224,7 +224,7 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
   let acc = 0;
 
   return (
-    <div className="donut-wrap" ref={containerProps.ref} onPointerEnter={containerProps.onPointerEnter} onPointerLeave={containerProps.onPointerLeave} onPointerMove={containerProps.onPointerMove}>
+    <div className="donut-wrap" {...(!abOptOut && { ref: containerProps.ref, onPointerEnter: containerProps.onPointerEnter, onPointerLeave: containerProps.onPointerLeave, onPointerMove: containerProps.onPointerMove })}>
       <svg className="donut-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--muted-2)" strokeWidth={strokeW} />
         {total > 0 && segments.map(s => {
@@ -245,7 +245,7 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
         })}
       </svg>
       <div className="donut-center">
-        <span className="donut-count" style={{ fontSize: centerFs }}>{total}</span>
+        <span className="donut-count" style={centerFs !== undefined ? { fontSize: centerFs } : undefined}>{total}</span>
         <span className="donut-label">alertas</span>
       </div>
     </div>
@@ -270,15 +270,15 @@ function TipoTag({ tipo, isResolved }: { tipo: AlertTipo; isResolved: boolean })
 }
 
 // ─── Trend Chart ──────────────────────────────────────────────────────────────
-function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selectedId: string | null }) {
+function TrendChart({ alerts, selectedId, abOptOut }: { alerts: DashboardAlert[]; selectedId: string | null; abOptOut: boolean }) {
   const { resolved, containerProps } = useAutoAB('trend-bar-style', {
     dimensions: {
       color: ['#4f86f7', '#a44ff7', '#10b981'],
       fontSize: [9, 11, 13],
     },
   });
-  const barColor = String(resolved.config.color);
-  const labelFs = Number(resolved.config.fontSize) || 11;
+  const barColor = abOptOut ? undefined : String(resolved.config.color);
+  const labelFs = abOptOut ? undefined : (Number(resolved.config.fontSize) || 11);
 
   const top12 = useMemo(() => (
     [...alerts]
@@ -291,7 +291,7 @@ function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selected
   if (top12.length === 0) return null;
 
   return (
-    <div className="trend-card" ref={containerProps.ref} onPointerEnter={containerProps.onPointerEnter} onPointerLeave={containerProps.onPointerLeave} onPointerMove={containerProps.onPointerMove}>
+    <div className="trend-card" {...(!abOptOut && { ref: containerProps.ref, onPointerEnter: containerProps.onPointerEnter, onPointerLeave: containerProps.onPointerLeave, onPointerMove: containerProps.onPointerMove })}>
       <p className="card-title">Impacto por producto · top 12</p>
       <div className="trend-chart">
         {top12.map(a => {
@@ -302,13 +302,13 @@ function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selected
             <div
               key={a.id}
               className={`trend-bar${isDanger ? ' danger' : ''}`}
-              style={{ height: `${pct}%`, opacity: isSel ? 1 : 0.7, outline: isSel ? '2px solid var(--ink-900)' : 'none', outlineOffset: '2px', backgroundColor: isDanger ? undefined : barColor }}
+              style={{ height: `${pct}%`, opacity: isSel ? 1 : 0.7, outline: isSel ? '2px solid var(--ink-900)' : 'none', outlineOffset: '2px', ...(!isDanger && barColor && { backgroundColor: barColor }) }}
               title={`${a.producto_nombre}: ${fmtMoney(a.difimporte)}`}
             />
           );
         })}
       </div>
-      <div className="trend-axis" style={{ fontSize: labelFs }}>
+      <div className="trend-axis" style={labelFs !== undefined ? { fontSize: labelFs } : undefined}>
         <span>{top12[0]?.producto_nombre.slice(0, 14)}</span>
         <span>{top12[top12.length - 1]?.producto_nombre.slice(0, 14)}</span>
       </div>
@@ -317,24 +317,24 @@ function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selected
 }
 
 // ─── Activity Feed ────────────────────────────────────────────────────────────
-function ActivityFeed({ alerts }: { alerts: DashboardAlert[] }) {
+function ActivityFeed({ alerts, abOptOut }: { alerts: DashboardAlert[]; abOptOut: boolean }) {
   const { resolved, containerProps } = useAutoAB('activity-feed-style', {
     dimensions: {
       fontSize: [12, 13, 14],
       size: ['compact', 'normal', 'spacious'],
     },
   });
-  const feedFs = Number(resolved.config.fontSize) || 13;
-  const feedGap = resolved.config.size === 'spacious' ? 14 : resolved.config.size === 'compact' ? 6 : 10;
+  const feedFs = abOptOut ? undefined : (Number(resolved.config.fontSize) || 13);
+  const feedGap = abOptOut ? undefined : (resolved.config.size === 'spacious' ? 14 : resolved.config.size === 'compact' ? 6 : 10);
 
   const top5 = useMemo(() => (
     [...alerts].sort((a, b) => b.score - a.score).slice(0, 5)
   ), [alerts]);
 
   return (
-    <div className="card" ref={containerProps.ref} onPointerEnter={containerProps.onPointerEnter} onPointerLeave={containerProps.onPointerLeave} onPointerMove={containerProps.onPointerMove}>
+    <div className="card" {...(!abOptOut && { ref: containerProps.ref, onPointerEnter: containerProps.onPointerEnter, onPointerLeave: containerProps.onPointerLeave, onPointerMove: containerProps.onPointerMove })}>
       <p className="card-title">Hallazgos más críticos</p>
-      <div className="activity" style={{ display: 'flex', flexDirection: 'column', gap: feedGap, fontSize: feedFs }}>
+      <div className="activity" style={{ display: 'flex', flexDirection: 'column', ...(feedGap !== undefined && { gap: feedGap }), ...(feedFs !== undefined && { fontSize: feedFs }) }}>
         {top5.map(a => (
           <div key={a.id} className="activity-row">
             <div className={`activity-dot${a.tipo === 'loss' ? ' danger' : a.tipo === 'surplus' ? ' amber' : ''}`} />
@@ -344,7 +344,7 @@ function ActivityFeed({ alerts }: { alerts: DashboardAlert[] }) {
             </div>
           </div>
         ))}
-        {top5.length === 0 && <p style={{ color: 'var(--ink-500)', fontSize: feedFs }}>Sin hallazgos</p>}
+        {top5.length === 0 && <p style={{ color: 'var(--ink-500)', ...(feedFs !== undefined && { fontSize: feedFs }) }}>Sin hallazgos</p>}
       </div>
     </div>
   );
@@ -601,6 +601,23 @@ export default function AlertDashboard() {
   );
 
   const abAdapter = useMemo(() => new LocalStorageAdapter('talos-ab'), []);
+  const noopAdapter = useMemo(() => ({
+    async recordMetrics() {},
+    async fetchStats() { return []; },
+  }), []);
+
+  const [abOptOut, setAbOptOut] = useState(() =>
+    typeof window !== 'undefined' && localStorage.getItem('talos-ab-optout') === '1'
+  );
+
+  function toggleAbOptOut() {
+    setAbOptOut(prev => {
+      const next = !prev;
+      if (next) localStorage.setItem('talos-ab-optout', '1');
+      else localStorage.removeItem('talos-ab-optout');
+      return next;
+    });
+  }
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -627,7 +644,7 @@ export default function AlertDashboard() {
   ];
 
   return (
-    <ABProvider adapter={abAdapter} defaultEpsilon={0.15} flushIntervalMs={4000}>
+    <ABProvider adapter={abOptOut ? noopAdapter : abAdapter} defaultEpsilon={0.15} flushIntervalMs={4000} cookieOptions={{ enabled: !abOptOut }}>
     <div className="app">
       {/* ── TopBar ── */}
       <header className="topbar">
@@ -652,6 +669,20 @@ export default function AlertDashboard() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+          <button
+            onClick={toggleAbOptOut}
+            title={abOptOut ? 'A/B testing desactivado — clic para activar' : 'A/B testing activo — clic para desactivar'}
+            style={{
+              fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+              padding: '3px 8px', borderRadius: 4, border: '1px solid',
+              cursor: 'pointer', lineHeight: 1.4,
+              background: abOptOut ? 'transparent' : 'rgba(255,255,255,0.15)',
+              borderColor: abOptOut ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.5)',
+              color: abOptOut ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.9)',
+            }}
+          >
+            AB {abOptOut ? 'off' : 'on'}
+          </button>
           <div className="avatar">A</div>
         </div>
       </header>
@@ -673,7 +704,7 @@ export default function AlertDashboard() {
           {/* ── Left Column ── */}
           <div className="left-col">
             <div className="donut-card">
-              <DonutChart alerts={alerts} revisadas={revisadas} />
+              <DonutChart alerts={alerts} revisadas={revisadas} abOptOut={abOptOut} />
               <p className="donut-title">{almacenNombre}</p>
               <p className="donut-subtitle">{fechaCierre ? fmtDate(fechaCierre) : '—'}</p>
               <div className="kpi-row">
@@ -887,8 +918,8 @@ export default function AlertDashboard() {
                 <p style={{ fontSize: 14, fontWeight: 500 }}>Selecciona una alerta para ver el detalle</p>
               </div>
             )}
-            <TrendChart alerts={alerts} selectedId={selectedAlertId} />
-            <ActivityFeed alerts={alerts} />
+            <TrendChart alerts={alerts} selectedId={selectedAlertId} abOptOut={abOptOut} />
+            <ActivityFeed alerts={alerts} abOptOut={abOptOut} />
           </div>
         </main>
       )}
