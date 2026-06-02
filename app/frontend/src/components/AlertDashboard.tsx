@@ -200,7 +200,7 @@ function DonutChart({ alerts, revisadas, abOptOut }: { alerts: DashboardAlert[];
   const { resolved, containerProps } = useAutoAB('donut-stroke', {
     dimensions: {
       size: ['small', 'medium', 'large'],
-      fontSize: [14, 16, 18],
+      fontSize: [24, 32, 40],
     },
   });
   const unresolved = alerts.filter(a => !revisadas.has(a.id));
@@ -273,7 +273,7 @@ function TipoTag({ tipo, isResolved }: { tipo: AlertTipo; isResolved: boolean })
 function TrendChart({ alerts, selectedId, abOptOut }: { alerts: DashboardAlert[]; selectedId: string | null; abOptOut: boolean }) {
   const { resolved, containerProps } = useAutoAB('trend-bar-style', {
     dimensions: {
-      color: ['#4f86f7', '#a44ff7', '#10b981'],
+      color: ['#2563eb', '#7c3aed', '#059669'],
       fontSize: [9, 11, 13],
     },
   });
@@ -645,7 +645,7 @@ function AlertDashboardContent({ abOptOut, toggleAbOptOut }: { abOptOut: boolean
   const { resolved: filterResolved } = useAutoAB('filter-panel-style', {
     dimensions: {
       size: ['small', 'medium', 'large'],
-      color: ['#e8f4fd', '#fdf3e8', '#e8fdf0'],
+      color: ['#1d4ed8', '#6d28d9', '#065f46'],
     },
   });
   const chipFs = abOptOut ? undefined
@@ -767,7 +767,7 @@ function AlertDashboardContent({ abOptOut, toggleAbOptOut }: { abOptOut: boolean
                         key={t}
                         className={`chip${isActive ? ' active' : ''}`}
                         onClick={() => setFilterTipo(t)}
-                        style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg }) }}
+                        style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg, color: '#fff' }) }}
                       >
                         {t === 'all' ? 'Todos' : TIPO_LABEL[t as AlertTipo | 'resolved']}
                         <span className="count">{cnt}</span>
@@ -789,7 +789,7 @@ function AlertDashboardContent({ abOptOut, toggleAbOptOut }: { abOptOut: boolean
                         key={val}
                         className={`chip${isActive ? ' active' : ''}`}
                         onClick={() => setFilterSeverity(val)}
-                        style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg }) }}
+                        style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg, color: '#fff' }) }}
                       >
                         {label}
                         <span className="count">{cnt}</span>
@@ -805,7 +805,7 @@ function AlertDashboardContent({ abOptOut, toggleAbOptOut }: { abOptOut: boolean
                   <button
                     className={`chip${filterCategory === 'all' ? ' active' : ''}`}
                     onClick={() => setFilterCategory('all')}
-                    style={{ ...(chipFs && { fontSize: chipFs }), ...(filterCategory === 'all' && chipActiveBg && { background: chipActiveBg }) }}
+                    style={{ ...(chipFs && { fontSize: chipFs }), ...(filterCategory === 'all' && chipActiveBg && { background: chipActiveBg, color: '#fff' }) }}
                   >
                     Todas
                     <span className="count">{alerts.length}</span>
@@ -817,7 +817,7 @@ function AlertDashboardContent({ abOptOut, toggleAbOptOut }: { abOptOut: boolean
                       key={cat}
                       className={`chip${isActive ? ' active' : ''}`}
                       onClick={() => setFilterCategory(cat)}
-                      style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg }) }}
+                      style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg, color: '#fff' }) }}
                     >
                       {cat}
                       <span className="count">{alerts.filter(a => a.producto_cat_nombre === cat).length}</span>
