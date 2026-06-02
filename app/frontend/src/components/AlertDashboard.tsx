@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { ABProvider, useAutoAB, LocalStorageAdapter } from 'auto-ab';
 
 const PULPO_JOKES = [
   '¿Por qué el pulpo es el mejor auditor? ¡Tiene ocho brazos para revisar ocho almacenes al mismo tiempo!',
@@ -196,6 +197,12 @@ const SEV_ORDER: Record<Severity, number> = { CRITICA: 4, ALTA: 3, MEDIA: 2, BAJ
 
 // ─── Donut ────────────────────────────────────────────────────────────────────
 function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas: Set<string> }) {
+  const { resolved, containerProps } = useAutoAB('donut-stroke', {
+    dimensions: {
+      size: ['small', 'medium', 'large'],
+      fontSize: [14, 16, 18],
+    },
+  });
   const unresolved = alerts.filter(a => !revisadas.has(a.id));
   const counts = {
     loss: unresolved.filter(a => a.tipo === 'loss').length,
@@ -204,9 +211,10 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
   };
   const total = counts.loss + counts.surplus + counts.missing;
   const size = 180;
-  const stroke = 24;
+  const strokeW = resolved.config.size === 'large' ? 30 : resolved.config.size === 'small' ? 18 : 24;
+  const centerFs = Number(resolved.config.fontSize) || 16;
   // Keep the stroke fully inside the SVG bounds to avoid clipping the ring edges.
-  const r = (size - stroke) / 2, cx = size / 2, cy = size / 2;
+  const r = (size - strokeW) / 2, cx = size / 2, cy = size / 2;
   const circ = 2 * Math.PI * r;
   const segments = [
     { key: 'loss', count: counts.loss, color: 'var(--danger)' },
@@ -216,9 +224,9 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
   let acc = 0;
 
   return (
-    <div className="donut-wrap">
+    <div className="donut-wrap" ref={containerProps.ref} onPointerEnter={containerProps.onPointerEnter} onPointerLeave={containerProps.onPointerLeave} onPointerMove={containerProps.onPointerMove}>
       <svg className="donut-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--muted-2)" strokeWidth={stroke} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--muted-2)" strokeWidth={strokeW} />
         {total > 0 && segments.map(s => {
           const len = (s.count / total) * circ;
           const el = (
@@ -227,7 +235,7 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
               cx={cx} cy={cy} r={r}
               fill="none"
               stroke={s.color}
-              strokeWidth={stroke}
+              strokeWidth={strokeW}
               strokeDasharray={`${len} ${circ}`}
               strokeDashoffset={-acc}
             />
@@ -237,7 +245,7 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
         })}
       </svg>
       <div className="donut-center">
-        <span className="donut-count">{total}</span>
+        <span className="donut-count" style={{ fontSize: centerFs }}>{total}</span>
         <span className="donut-label">alertas</span>
       </div>
     </div>
@@ -263,6 +271,15 @@ function TipoTag({ tipo, isResolved }: { tipo: AlertTipo; isResolved: boolean })
 
 // ─── Trend Chart ──────────────────────────────────────────────────────────────
 function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selectedId: string | null }) {
+  const { resolved, containerProps } = useAutoAB('trend-bar-style', {
+    dimensions: {
+      color: ['#4f86f7', '#a44ff7', '#10b981'],
+      fontSize: [9, 11, 13],
+    },
+  });
+  const barColor = String(resolved.config.color);
+  const labelFs = Number(resolved.config.fontSize) || 11;
+
   const top12 = useMemo(() => (
     [...alerts]
       .sort((a, b) => Math.abs(b.difimporte) - Math.abs(a.difimporte))
@@ -274,7 +291,7 @@ function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selected
   if (top12.length === 0) return null;
 
   return (
-    <div className="trend-card">
+    <div className="trend-card" ref={containerProps.ref} onPointerEnter={containerProps.onPointerEnter} onPointerLeave={containerProps.onPointerLeave} onPointerMove={containerProps.onPointerMove}>
       <p className="card-title">Impacto por producto · top 12</p>
       <div className="trend-chart">
         {top12.map(a => {
@@ -285,13 +302,13 @@ function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selected
             <div
               key={a.id}
               className={`trend-bar${isDanger ? ' danger' : ''}`}
-              style={{ height: `${pct}%`, opacity: isSel ? 1 : 0.7, outline: isSel ? '2px solid var(--ink-900)' : 'none', outlineOffset: '2px' }}
+              style={{ height: `${pct}%`, opacity: isSel ? 1 : 0.7, outline: isSel ? '2px solid var(--ink-900)' : 'none', outlineOffset: '2px', backgroundColor: isDanger ? undefined : barColor }}
               title={`${a.producto_nombre}: ${fmtMoney(a.difimporte)}`}
             />
           );
         })}
       </div>
-      <div className="trend-axis">
+      <div className="trend-axis" style={{ fontSize: labelFs }}>
         <span>{top12[0]?.producto_nombre.slice(0, 14)}</span>
         <span>{top12[top12.length - 1]?.producto_nombre.slice(0, 14)}</span>
       </div>
@@ -301,14 +318,23 @@ function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selected
 
 // ─── Activity Feed ────────────────────────────────────────────────────────────
 function ActivityFeed({ alerts }: { alerts: DashboardAlert[] }) {
+  const { resolved, containerProps } = useAutoAB('activity-feed-style', {
+    dimensions: {
+      fontSize: [12, 13, 14],
+      size: ['compact', 'normal', 'spacious'],
+    },
+  });
+  const feedFs = Number(resolved.config.fontSize) || 13;
+  const feedGap = resolved.config.size === 'spacious' ? 14 : resolved.config.size === 'compact' ? 6 : 10;
+
   const top5 = useMemo(() => (
     [...alerts].sort((a, b) => b.score - a.score).slice(0, 5)
   ), [alerts]);
 
   return (
-    <div className="card">
+    <div className="card" ref={containerProps.ref} onPointerEnter={containerProps.onPointerEnter} onPointerLeave={containerProps.onPointerLeave} onPointerMove={containerProps.onPointerMove}>
       <p className="card-title">Hallazgos más críticos</p>
-      <div className="activity">
+      <div className="activity" style={{ display: 'flex', flexDirection: 'column', gap: feedGap, fontSize: feedFs }}>
         {top5.map(a => (
           <div key={a.id} className="activity-row">
             <div className={`activity-dot${a.tipo === 'loss' ? ' danger' : a.tipo === 'surplus' ? ' amber' : ''}`} />
@@ -318,7 +344,7 @@ function ActivityFeed({ alerts }: { alerts: DashboardAlert[] }) {
             </div>
           </div>
         ))}
-        {top5.length === 0 && <p style={{ color: 'var(--ink-500)', fontSize: 13 }}>Sin hallazgos</p>}
+        {top5.length === 0 && <p style={{ color: 'var(--ink-500)', fontSize: feedFs }}>Sin hallazgos</p>}
       </div>
     </div>
   );
@@ -574,6 +600,8 @@ export default function AlertDashboard() {
     [alerts],
   );
 
+  const abAdapter = useMemo(() => new LocalStorageAdapter('talos-ab'), []);
+
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 2500);
@@ -599,6 +627,7 @@ export default function AlertDashboard() {
   ];
 
   return (
+    <ABProvider adapter={abAdapter} defaultEpsilon={0.15} flushIntervalMs={4000}>
     <div className="app">
       {/* ── TopBar ── */}
       <header className="topbar">
@@ -872,5 +901,6 @@ export default function AlertDashboard() {
         {toastMsg}
       </div>
     </div>
+    </ABProvider>
   );
 }
