@@ -49,7 +49,7 @@ function PulpoMascot() {
 
   const scheduleCage = useCallback(() => {
     if (cageTimerRef.current) clearTimeout(cageTimerRef.current);
-    const delay = 20000 + Math.random() * 25000; // 20–45 s
+    const delay = 165000 + Math.random() * 30000; // 2m45s–3m15s
     cageTimerRef.current = setTimeout(() => setCaged(true), delay);
   }, []);
 
