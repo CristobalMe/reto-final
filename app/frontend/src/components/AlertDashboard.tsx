@@ -485,7 +485,7 @@ function DetailPanel({
 }
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
-export default function AlertDashboard() {
+function AlertDashboardContent({ abOptOut, toggleAbOptOut }: { abOptOut: boolean; toggleAbOptOut: () => void }) {
   const [closures, setClosures] = useState<ClosureListItem[]>([]);
   const [selectedClosureId, setSelectedClosureId] = useState<number | null>(null);
   const [alerts, setAlerts] = useState<DashboardAlert[]>([]);
@@ -600,25 +600,6 @@ export default function AlertDashboard() {
     [alerts],
   );
 
-  const abAdapter = useMemo(() => new LocalStorageAdapter('talos-ab'), []);
-  const noopAdapter = useMemo(() => ({
-    async recordMetrics() {},
-    async fetchStats() { return []; },
-  }), []);
-
-  const [abOptOut, setAbOptOut] = useState(() =>
-    typeof window !== 'undefined' && localStorage.getItem('talos-ab-optout') === '1'
-  );
-
-  function toggleAbOptOut() {
-    setAbOptOut(prev => {
-      const next = !prev;
-      if (next) localStorage.setItem('talos-ab-optout', '1');
-      else localStorage.removeItem('talos-ab-optout');
-      return next;
-    });
-  }
-
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 2500);
@@ -634,6 +615,45 @@ export default function AlertDashboard() {
     showToast('Alerta reabierta');
   }
 
+  // ── Layout A/B ──────────────────────────────────────────────────────────────
+  const { resolved: layoutResolved } = useAutoAB('dashboard-layout', {
+    dimensions: {
+      layout: ['default', 'swapped'],
+      size: ['narrow', 'normal', 'wide'],
+    },
+  });
+  const isSwapped = !abOptOut && layoutResolved.config.layout === 'swapped';
+  const sidebarW = abOptOut ? undefined
+    : layoutResolved.config.size === 'wide' ? 320
+    : layoutResolved.config.size === 'narrow' ? 200
+    : undefined;
+
+  // ── Alert table A/B ─────────────────────────────────────────────────────────
+  const { resolved: tableResolved } = useAutoAB('alert-table-style', {
+    dimensions: {
+      fontSize: [12, 13, 14],
+      size: ['compact', 'normal', 'spacious'],
+    },
+  });
+  const tableFs = abOptOut ? undefined : (Number(tableResolved.config.fontSize) || undefined);
+  const rowPadV = abOptOut ? undefined
+    : tableResolved.config.size === 'spacious' ? 10
+    : tableResolved.config.size === 'compact' ? 4
+    : undefined;
+
+  // ── Filter panel A/B ────────────────────────────────────────────────────────
+  const { resolved: filterResolved } = useAutoAB('filter-panel-style', {
+    dimensions: {
+      size: ['small', 'medium', 'large'],
+      color: ['#e8f4fd', '#fdf3e8', '#e8fdf0'],
+    },
+  });
+  const chipFs = abOptOut ? undefined
+    : filterResolved.config.size === 'large' ? 13
+    : filterResolved.config.size === 'small' ? 10
+    : undefined;
+  const chipActiveBg = abOptOut ? undefined : String(filterResolved.config.color);
+
   // Severity chip data
   const severityChips: { label: string; val: FilterSeverity }[] = [
     { label: 'Todas', val: 'all' },
@@ -644,7 +664,6 @@ export default function AlertDashboard() {
   ];
 
   return (
-    <ABProvider adapter={abOptOut ? noopAdapter : abAdapter} defaultEpsilon={0.15} flushIntervalMs={4000} cookieOptions={{ enabled: !abOptOut }}>
     <div className="app">
       {/* ── TopBar ── */}
       <header className="topbar">
@@ -700,9 +719,9 @@ export default function AlertDashboard() {
       )}
 
       {!loading && !error && (
-        <main className="main">
+        <main className="main" style={sidebarW ? { gridTemplateColumns: `${sidebarW}px 1fr ${sidebarW}px` } : undefined}>
           {/* ── Left Column ── */}
-          <div className="left-col">
+          <div className="left-col" style={{ order: isSwapped ? 3 : 1, ...(sidebarW ? { minWidth: sidebarW, maxWidth: sidebarW } : {}) }}>
             <div className="donut-card">
               <DonutChart alerts={alerts} revisadas={revisadas} abOptOut={abOptOut} />
               <p className="donut-title">{almacenNombre}</p>
@@ -742,11 +761,13 @@ export default function AlertDashboard() {
                     const cnt = t === 'all' ? alerts.length - revisadas.size
                       : t === 'resolved' ? counts.resolved
                       : counts[t as AlertTipo];
+                    const isActive = filterTipo === t;
                     return (
                       <button
                         key={t}
-                        className={`chip${filterTipo === t ? ' active' : ''}`}
+                        className={`chip${isActive ? ' active' : ''}`}
                         onClick={() => setFilterTipo(t)}
+                        style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg }) }}
                       >
                         {t === 'all' ? 'Todos' : TIPO_LABEL[t as AlertTipo | 'resolved']}
                         <span className="count">{cnt}</span>
@@ -762,11 +783,13 @@ export default function AlertDashboard() {
                   {severityChips.map(({ label, val }) => {
                     const cnt = val === 'all' ? alerts.length
                       : alerts.filter(a => a.severity_label === val).length;
+                    const isActive = filterSeverity === val;
                     return (
                       <button
                         key={val}
-                        className={`chip${filterSeverity === val ? ' active' : ''}`}
+                        className={`chip${isActive ? ' active' : ''}`}
                         onClick={() => setFilterSeverity(val)}
+                        style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg }) }}
                       >
                         {label}
                         <span className="count">{cnt}</span>
@@ -782,27 +805,31 @@ export default function AlertDashboard() {
                   <button
                     className={`chip${filterCategory === 'all' ? ' active' : ''}`}
                     onClick={() => setFilterCategory('all')}
+                    style={{ ...(chipFs && { fontSize: chipFs }), ...(filterCategory === 'all' && chipActiveBg && { background: chipActiveBg }) }}
                   >
                     Todas
                     <span className="count">{alerts.length}</span>
                   </button>
-                  {categories.map(cat => (
+                  {categories.map(cat => {
+                    const isActive = filterCategory === cat;
+                    return (
                     <button
                       key={cat}
-                      className={`chip${filterCategory === cat ? ' active' : ''}`}
+                      className={`chip${isActive ? ' active' : ''}`}
                       onClick={() => setFilterCategory(cat)}
+                      style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg }) }}
                     >
                       {cat}
                       <span className="count">{alerts.filter(a => a.producto_cat_nombre === cat).length}</span>
                     </button>
-                  ))}
+                  );})}
                 </div>
               </div>
             </div>
           </div>
 
           {/* ── Middle Column ── */}
-          <div className="middle-col">
+          <div className="middle-col" style={{ order: 2 }}>
             {/* Summary strip */}
             <div className="summary-strip">
               {(['loss', 'surplus', 'missing', 'resolved'] as const).map(t => {
@@ -843,7 +870,7 @@ export default function AlertDashboard() {
                 </select>
               </div>
 
-              <div className="alert-head-row">
+              <div className="alert-head-row" style={{ ...(tableFs && { fontSize: tableFs }) }}>
                 <span />
                 <span>Producto</span>
                 <span>Categoría</span>
@@ -872,6 +899,7 @@ export default function AlertDashboard() {
                       key={a.id}
                       className={`alert-row${isSel ? ' selected' : ''}`}
                       onClick={() => setSelectedAlertId(isSel ? null : a.id)}
+                      style={{ ...(tableFs && { fontSize: tableFs }), ...(rowPadV !== undefined && { paddingTop: rowPadV, paddingBottom: rowPadV }) }}
                     >
                       <span
                         className={`sev-dot ${isResolved ? 'resolved' : a.tipo}`}
@@ -901,7 +929,7 @@ export default function AlertDashboard() {
           </div>
 
           {/* ── Right Column ── */}
-          <div className="right-col" ref={rightColRef}>
+          <div className="right-col" ref={rightColRef} style={{ order: isSwapped ? 1 : 3, ...(sidebarW ? { minWidth: sidebarW, maxWidth: sidebarW } : {}) }}>
             {selectedAlert ? (
               <DetailPanel
                 alert={selectedAlert}
@@ -932,6 +960,35 @@ export default function AlertDashboard() {
         {toastMsg}
       </div>
     </div>
+  );
+}
+
+// ─── Outer wrapper: ABProvider + opt-out state ────────────────────────────────
+export default function AlertDashboard() {
+  const abAdapter = useMemo(() => new LocalStorageAdapter('talos-ab'), []);
+  const noopAdapter = useMemo(() => ({
+    async recordMetrics() {},
+    async fetchStats() { return []; },
+  }), []);
+  const [abOptOut, setAbOptOut] = useState(() =>
+    typeof window !== 'undefined' && localStorage.getItem('talos-ab-optout') === '1'
+  );
+  function toggleAbOptOut() {
+    setAbOptOut(prev => {
+      const next = !prev;
+      if (next) localStorage.setItem('talos-ab-optout', '1');
+      else localStorage.removeItem('talos-ab-optout');
+      return next;
+    });
+  }
+  return (
+    <ABProvider
+      adapter={abOptOut ? noopAdapter : abAdapter}
+      defaultEpsilon={0.15}
+      flushIntervalMs={4000}
+      cookieOptions={{ enabled: !abOptOut }}
+    >
+      <AlertDashboardContent abOptOut={abOptOut} toggleAbOptOut={toggleAbOptOut} />
     </ABProvider>
   );
 }
