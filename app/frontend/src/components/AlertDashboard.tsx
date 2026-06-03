@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { ABProvider, useAutoAB, LocalStorageAdapter } from 'auto-ab';
 
 const PULPO_JOKES = [
   '¿Por qué el pulpo es el mejor auditor? ¡Tiene ocho brazos para revisar ocho almacenes al mismo tiempo!',
@@ -48,7 +49,7 @@ function PulpoMascot() {
 
   const scheduleCage = useCallback(() => {
     if (cageTimerRef.current) clearTimeout(cageTimerRef.current);
-    const delay = 20000 + Math.random() * 25000; // 20–45 s
+    const delay = 165000 + Math.random() * 30000; // 2m45s–3m15s
     cageTimerRef.current = setTimeout(() => setCaged(true), delay);
   }, []);
 
@@ -195,7 +196,13 @@ const TIPO_LABEL: Record<AlertTipo | 'resolved', string> = {
 const SEV_ORDER: Record<Severity, number> = { CRITICA: 4, ALTA: 3, MEDIA: 2, BAJA: 1 };
 
 // ─── Donut ────────────────────────────────────────────────────────────────────
-function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas: Set<string> }) {
+function DonutChart({ alerts, revisadas, abOptOut }: { alerts: DashboardAlert[]; revisadas: Set<string>; abOptOut: boolean }) {
+  const { resolved, containerProps } = useAutoAB('donut-stroke', {
+    dimensions: {
+      size: ['small', 'medium', 'large'],
+      fontSize: [24, 32, 40],
+    },
+  });
   const unresolved = alerts.filter(a => !revisadas.has(a.id));
   const counts = {
     loss: unresolved.filter(a => a.tipo === 'loss').length,
@@ -204,9 +211,10 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
   };
   const total = counts.loss + counts.surplus + counts.missing;
   const size = 180;
-  const stroke = 24;
+  const strokeW = abOptOut ? 24 : (resolved.config.size === 'large' ? 30 : resolved.config.size === 'small' ? 18 : 24);
+  const centerFs = abOptOut ? undefined : (Number(resolved.config.fontSize) || 16);
   // Keep the stroke fully inside the SVG bounds to avoid clipping the ring edges.
-  const r = (size - stroke) / 2, cx = size / 2, cy = size / 2;
+  const r = (size - strokeW) / 2, cx = size / 2, cy = size / 2;
   const circ = 2 * Math.PI * r;
   const segments = [
     { key: 'loss', count: counts.loss, color: 'var(--danger)' },
@@ -216,9 +224,9 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
   let acc = 0;
 
   return (
-    <div className="donut-wrap">
+    <div className="donut-wrap" {...(!abOptOut && { ref: containerProps.ref, onPointerEnter: containerProps.onPointerEnter, onPointerLeave: containerProps.onPointerLeave, onPointerMove: containerProps.onPointerMove })}>
       <svg className="donut-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--muted-2)" strokeWidth={stroke} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--muted-2)" strokeWidth={strokeW} />
         {total > 0 && segments.map(s => {
           const len = (s.count / total) * circ;
           const el = (
@@ -227,7 +235,7 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
               cx={cx} cy={cy} r={r}
               fill="none"
               stroke={s.color}
-              strokeWidth={stroke}
+              strokeWidth={strokeW}
               strokeDasharray={`${len} ${circ}`}
               strokeDashoffset={-acc}
             />
@@ -237,7 +245,7 @@ function DonutChart({ alerts, revisadas }: { alerts: DashboardAlert[]; revisadas
         })}
       </svg>
       <div className="donut-center">
-        <span className="donut-count">{total}</span>
+        <span className="donut-count" style={centerFs !== undefined ? { fontSize: centerFs } : undefined}>{total}</span>
         <span className="donut-label">alertas</span>
       </div>
     </div>
@@ -262,7 +270,16 @@ function TipoTag({ tipo, isResolved }: { tipo: AlertTipo; isResolved: boolean })
 }
 
 // ─── Trend Chart ──────────────────────────────────────────────────────────────
-function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selectedId: string | null }) {
+function TrendChart({ alerts, selectedId, abOptOut }: { alerts: DashboardAlert[]; selectedId: string | null; abOptOut: boolean }) {
+  const { resolved, containerProps } = useAutoAB('trend-bar-style', {
+    dimensions: {
+      color: ['#2563eb', '#7c3aed', '#059669'],
+      fontSize: [9, 11, 13],
+    },
+  });
+  const barColor = abOptOut ? undefined : String(resolved.config.color);
+  const labelFs = abOptOut ? undefined : (Number(resolved.config.fontSize) || 11);
+
   const top12 = useMemo(() => (
     [...alerts]
       .sort((a, b) => Math.abs(b.difimporte) - Math.abs(a.difimporte))
@@ -274,7 +291,7 @@ function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selected
   if (top12.length === 0) return null;
 
   return (
-    <div className="trend-card">
+    <div className="trend-card" {...(!abOptOut && { ref: containerProps.ref, onPointerEnter: containerProps.onPointerEnter, onPointerLeave: containerProps.onPointerLeave, onPointerMove: containerProps.onPointerMove })}>
       <p className="card-title">Impacto por producto · top 12</p>
       <div className="trend-chart">
         {top12.map(a => {
@@ -285,13 +302,13 @@ function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selected
             <div
               key={a.id}
               className={`trend-bar${isDanger ? ' danger' : ''}`}
-              style={{ height: `${pct}%`, opacity: isSel ? 1 : 0.7, outline: isSel ? '2px solid var(--ink-900)' : 'none', outlineOffset: '2px' }}
+              style={{ height: `${pct}%`, opacity: isSel ? 1 : 0.7, outline: isSel ? '2px solid var(--ink-900)' : 'none', outlineOffset: '2px', ...(!isDanger && barColor && { backgroundColor: barColor }) }}
               title={`${a.producto_nombre}: ${fmtMoney(a.difimporte)}`}
             />
           );
         })}
       </div>
-      <div className="trend-axis">
+      <div className="trend-axis" style={labelFs !== undefined ? { fontSize: labelFs } : undefined}>
         <span>{top12[0]?.producto_nombre.slice(0, 14)}</span>
         <span>{top12[top12.length - 1]?.producto_nombre.slice(0, 14)}</span>
       </div>
@@ -300,15 +317,24 @@ function TrendChart({ alerts, selectedId }: { alerts: DashboardAlert[]; selected
 }
 
 // ─── Activity Feed ────────────────────────────────────────────────────────────
-function ActivityFeed({ alerts }: { alerts: DashboardAlert[] }) {
+function ActivityFeed({ alerts, abOptOut }: { alerts: DashboardAlert[]; abOptOut: boolean }) {
+  const { resolved, containerProps } = useAutoAB('activity-feed-style', {
+    dimensions: {
+      fontSize: [12, 13, 14],
+      size: ['compact', 'normal', 'spacious'],
+    },
+  });
+  const feedFs = abOptOut ? undefined : (Number(resolved.config.fontSize) || 13);
+  const feedGap = abOptOut ? undefined : (resolved.config.size === 'spacious' ? 14 : resolved.config.size === 'compact' ? 6 : 10);
+
   const top5 = useMemo(() => (
     [...alerts].sort((a, b) => b.score - a.score).slice(0, 5)
   ), [alerts]);
 
   return (
-    <div className="card">
+    <div className="card" {...(!abOptOut && { ref: containerProps.ref, onPointerEnter: containerProps.onPointerEnter, onPointerLeave: containerProps.onPointerLeave, onPointerMove: containerProps.onPointerMove })}>
       <p className="card-title">Hallazgos más críticos</p>
-      <div className="activity">
+      <div className="activity" style={{ display: 'flex', flexDirection: 'column', ...(feedGap !== undefined && { gap: feedGap }), ...(feedFs !== undefined && { fontSize: feedFs }) }}>
         {top5.map(a => (
           <div key={a.id} className="activity-row">
             <div className={`activity-dot${a.tipo === 'loss' ? ' danger' : a.tipo === 'surplus' ? ' amber' : ''}`} />
@@ -318,7 +344,7 @@ function ActivityFeed({ alerts }: { alerts: DashboardAlert[] }) {
             </div>
           </div>
         ))}
-        {top5.length === 0 && <p style={{ color: 'var(--ink-500)', fontSize: 13 }}>Sin hallazgos</p>}
+        {top5.length === 0 && <p style={{ color: 'var(--ink-500)', ...(feedFs !== undefined && { fontSize: feedFs }) }}>Sin hallazgos</p>}
       </div>
     </div>
   );
@@ -459,7 +485,7 @@ function DetailPanel({
 }
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
-export default function AlertDashboard() {
+function AlertDashboardContent({ abOptOut, toggleAbOptOut }: { abOptOut: boolean; toggleAbOptOut: () => void }) {
   const [closures, setClosures] = useState<ClosureListItem[]>([]);
   const [selectedClosureId, setSelectedClosureId] = useState<number | null>(null);
   const [alerts, setAlerts] = useState<DashboardAlert[]>([]);
@@ -477,6 +503,18 @@ export default function AlertDashboard() {
   const [revisadas, setRevisadas] = useState<Set<string>>(new Set());
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const rightColRef = useRef<HTMLDivElement>(null);
+
+  // True when the viewport is wide enough for multi-column layout (matches the
+  // 1080px breakpoint in globals.css).  A/B layout overrides must only apply
+  // in this state so they never stomp the mobile single-column media query.
+  const [isWide, setIsWide] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1081px)');
+    setIsWide(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsWide(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   // Fetch closure list on mount
   useEffect(() => {
@@ -589,6 +627,48 @@ export default function AlertDashboard() {
     showToast('Alerta reabierta');
   }
 
+  // ── Layout A/B ──────────────────────────────────────────────────────────────
+  const { resolved: layoutResolved } = useAutoAB('dashboard-layout', {
+    dimensions: {
+      layout: ['default', 'swapped'],
+      size: ['narrow', 'normal', 'wide'],
+    },
+  });
+  // Only apply A/B layout overrides when the viewport is in multi-column mode.
+  // On mobile the grid is already single-column via media query and inline
+  // styles would override that, breaking the layout.
+  const isSwapped = isWide && !abOptOut && layoutResolved.config.layout === 'swapped';
+  const sidebarW = !isWide || abOptOut ? undefined
+    : layoutResolved.config.size === 'wide' ? 320
+    : layoutResolved.config.size === 'narrow' ? 200
+    : undefined;
+
+  // ── Alert table A/B ─────────────────────────────────────────────────────────
+  const { resolved: tableResolved } = useAutoAB('alert-table-style', {
+    dimensions: {
+      fontSize: [12, 13, 14],
+      size: ['compact', 'normal', 'spacious'],
+    },
+  });
+  const tableFs = abOptOut ? undefined : (Number(tableResolved.config.fontSize) || undefined);
+  const rowPadV = abOptOut ? undefined
+    : tableResolved.config.size === 'spacious' ? 10
+    : tableResolved.config.size === 'compact' ? 4
+    : undefined;
+
+  // ── Filter panel A/B ────────────────────────────────────────────────────────
+  const { resolved: filterResolved } = useAutoAB('filter-panel-style', {
+    dimensions: {
+      size: ['small', 'medium', 'large'],
+      color: ['#1d4ed8', '#6d28d9', '#065f46'],
+    },
+  });
+  const chipFs = abOptOut ? undefined
+    : filterResolved.config.size === 'large' ? 13
+    : filterResolved.config.size === 'small' ? 10
+    : undefined;
+  const chipActiveBg = abOptOut ? undefined : String(filterResolved.config.color);
+
   // Severity chip data
   const severityChips: { label: string; val: FilterSeverity }[] = [
     { label: 'Todas', val: 'all' },
@@ -623,6 +703,20 @@ export default function AlertDashboard() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+          <button
+            onClick={toggleAbOptOut}
+            title={abOptOut ? 'A/B testing desactivado — clic para activar' : 'A/B testing activo — clic para desactivar'}
+            style={{
+              fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+              padding: '3px 8px', borderRadius: 4, border: '1px solid',
+              cursor: 'pointer', lineHeight: 1.4,
+              background: abOptOut ? 'transparent' : 'rgba(255,255,255,0.15)',
+              borderColor: abOptOut ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.5)',
+              color: abOptOut ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.9)',
+            }}
+          >
+            AB {abOptOut ? 'off' : 'on'}
+          </button>
           <div className="avatar">A</div>
         </div>
       </header>
@@ -640,11 +734,11 @@ export default function AlertDashboard() {
       )}
 
       {!loading && !error && (
-        <main className="main">
+        <main className="main" style={sidebarW ? { gridTemplateColumns: `${sidebarW}px 1fr ${sidebarW}px` } : undefined}>
           {/* ── Left Column ── */}
-          <div className="left-col">
+          <div className="left-col" style={{ order: isSwapped ? 3 : 1, ...(sidebarW ? { minWidth: sidebarW, maxWidth: sidebarW } : {}) }}>
             <div className="donut-card">
-              <DonutChart alerts={alerts} revisadas={revisadas} />
+              <DonutChart alerts={alerts} revisadas={revisadas} abOptOut={abOptOut} />
               <p className="donut-title">{almacenNombre}</p>
               <p className="donut-subtitle">{fechaCierre ? fmtDate(fechaCierre) : '—'}</p>
               <div className="kpi-row">
@@ -682,11 +776,13 @@ export default function AlertDashboard() {
                     const cnt = t === 'all' ? alerts.length - revisadas.size
                       : t === 'resolved' ? counts.resolved
                       : counts[t as AlertTipo];
+                    const isActive = filterTipo === t;
                     return (
                       <button
                         key={t}
-                        className={`chip${filterTipo === t ? ' active' : ''}`}
+                        className={`chip${isActive ? ' active' : ''}`}
                         onClick={() => setFilterTipo(t)}
+                        style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg, color: '#fff' }) }}
                       >
                         {t === 'all' ? 'Todos' : TIPO_LABEL[t as AlertTipo | 'resolved']}
                         <span className="count">{cnt}</span>
@@ -702,11 +798,13 @@ export default function AlertDashboard() {
                   {severityChips.map(({ label, val }) => {
                     const cnt = val === 'all' ? alerts.length
                       : alerts.filter(a => a.severity_label === val).length;
+                    const isActive = filterSeverity === val;
                     return (
                       <button
                         key={val}
-                        className={`chip${filterSeverity === val ? ' active' : ''}`}
+                        className={`chip${isActive ? ' active' : ''}`}
                         onClick={() => setFilterSeverity(val)}
+                        style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg, color: '#fff' }) }}
                       >
                         {label}
                         <span className="count">{cnt}</span>
@@ -722,27 +820,31 @@ export default function AlertDashboard() {
                   <button
                     className={`chip${filterCategory === 'all' ? ' active' : ''}`}
                     onClick={() => setFilterCategory('all')}
+                    style={{ ...(chipFs && { fontSize: chipFs }), ...(filterCategory === 'all' && chipActiveBg && { background: chipActiveBg, color: '#fff' }) }}
                   >
                     Todas
                     <span className="count">{alerts.length}</span>
                   </button>
-                  {categories.map(cat => (
+                  {categories.map(cat => {
+                    const isActive = filterCategory === cat;
+                    return (
                     <button
                       key={cat}
-                      className={`chip${filterCategory === cat ? ' active' : ''}`}
+                      className={`chip${isActive ? ' active' : ''}`}
                       onClick={() => setFilterCategory(cat)}
+                      style={{ ...(chipFs && { fontSize: chipFs }), ...(isActive && chipActiveBg && { background: chipActiveBg, color: '#fff' }) }}
                     >
                       {cat}
                       <span className="count">{alerts.filter(a => a.producto_cat_nombre === cat).length}</span>
                     </button>
-                  ))}
+                  );})}
                 </div>
               </div>
             </div>
           </div>
 
           {/* ── Middle Column ── */}
-          <div className="middle-col">
+          <div className="middle-col" style={{ order: 2 }}>
             {/* Summary strip */}
             <div className="summary-strip">
               {(['loss', 'surplus', 'missing', 'resolved'] as const).map(t => {
@@ -783,7 +885,7 @@ export default function AlertDashboard() {
                 </select>
               </div>
 
-              <div className="alert-head-row">
+              <div className="alert-head-row" style={{ ...(tableFs && { fontSize: tableFs }) }}>
                 <span />
                 <span>Producto</span>
                 <span>Categoría</span>
@@ -812,6 +914,7 @@ export default function AlertDashboard() {
                       key={a.id}
                       className={`alert-row${isSel ? ' selected' : ''}`}
                       onClick={() => setSelectedAlertId(isSel ? null : a.id)}
+                      style={{ ...(tableFs && { fontSize: tableFs }), ...(rowPadV !== undefined && { paddingTop: rowPadV, paddingBottom: rowPadV }) }}
                     >
                       <span
                         className={`sev-dot ${isResolved ? 'resolved' : a.tipo}`}
@@ -841,7 +944,7 @@ export default function AlertDashboard() {
           </div>
 
           {/* ── Right Column ── */}
-          <div className="right-col" ref={rightColRef}>
+          <div className="right-col" ref={rightColRef} style={{ order: isSwapped ? 1 : 3, ...(sidebarW ? { minWidth: sidebarW, maxWidth: sidebarW } : {}) }}>
             {selectedAlert ? (
               <DetailPanel
                 alert={selectedAlert}
@@ -858,8 +961,8 @@ export default function AlertDashboard() {
                 <p style={{ fontSize: 14, fontWeight: 500 }}>Selecciona una alerta para ver el detalle</p>
               </div>
             )}
-            <TrendChart alerts={alerts} selectedId={selectedAlertId} />
-            <ActivityFeed alerts={alerts} />
+            <TrendChart alerts={alerts} selectedId={selectedAlertId} abOptOut={abOptOut} />
+            <ActivityFeed alerts={alerts} abOptOut={abOptOut} />
           </div>
         </main>
       )}
@@ -872,5 +975,35 @@ export default function AlertDashboard() {
         {toastMsg}
       </div>
     </div>
+  );
+}
+
+// ─── Outer wrapper: ABProvider + opt-out state ────────────────────────────────
+export default function AlertDashboard() {
+  const abAdapter = useMemo(() => new LocalStorageAdapter('talos-ab'), []);
+  const noopAdapter = useMemo(() => ({
+    async recordMetrics() {},
+    async fetchStats() { return []; },
+  }), []);
+  const [abOptOut, setAbOptOut] = useState(() =>
+    typeof window !== 'undefined' && localStorage.getItem('talos-ab-optout') === '1'
+  );
+  function toggleAbOptOut() {
+    setAbOptOut(prev => {
+      const next = !prev;
+      if (next) localStorage.setItem('talos-ab-optout', '1');
+      else localStorage.removeItem('talos-ab-optout');
+      return next;
+    });
+  }
+  return (
+    <ABProvider
+      adapter={abOptOut ? noopAdapter : abAdapter}
+      defaultEpsilon={0.15}
+      flushIntervalMs={4000}
+      cookieOptions={{ enabled: !abOptOut }}
+    >
+      <AlertDashboardContent abOptOut={abOptOut} toggleAbOptOut={toggleAbOptOut} />
+    </ABProvider>
   );
 }

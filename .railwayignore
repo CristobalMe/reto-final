@@ -1,0 +1,19 @@
+# Exclude the full 2GB dataset — only the subset is needed
+data/talos_tecmty/talos_tecmty_data.sql
+data/talos_tecmty/talos_tecmty _structure.sql
+data/talos_tecmty/subset_118888.sql
+
+# Local dev artifacts
+.git
+.vscode
+__pycache__
+*.pyc
+*.pyo
+.DS_Store
+notebooks/
+entregables/
+
+# Node modules (rebuilt in Docker)
+app/frontend/node_modules/
+ab-testing-package/node_modules/
+ab-testing-package/example/
