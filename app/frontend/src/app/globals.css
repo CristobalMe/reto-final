@@ -134,7 +134,8 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
 }
 .donut-wrap {
   position: relative;
-  width: 180px; height: 180px;
+  width: min(180px, 100%);
+  aspect-ratio: 1;
   margin: 4px auto 16px;
 }
 .donut-center {
@@ -157,10 +158,13 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
   font-size: 22px; font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--ink-900);
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 .donut-subtitle {
   font-size: 13px; color: var(--ink-500);
   margin-top: 4px;
+  word-break: break-word;
 }
 .donut-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
 
@@ -716,6 +720,8 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
   .topbar-right { flex: 1; min-width: 0; }
   .search { flex: 1; width: auto; min-width: 0; max-width: none; }
   .search input { min-width: 0; width: 100%; }
+  /* Shrink mascot so it doesn't crowd the search bar */
+  .pulpo-mascot { max-width: 80px; flex: 0 0 80px; }
 
   .main { padding: 12px; gap: 12px; }
 
@@ -752,6 +758,8 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
   .logo-mark { width: 28px; height: 28px; }
   .search { max-width: none; }
   .avatar { width: 30px; height: 30px; font-size: 12px; border-radius: 50%; }
+  /* Hide mascot on very small screens — too cramped */
+  .pulpo-mascot { display: none; }
 
   .main { padding: 8px; gap: 10px; }
 

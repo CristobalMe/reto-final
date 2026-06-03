@@ -504,6 +504,18 @@ function AlertDashboardContent({ abOptOut, toggleAbOptOut }: { abOptOut: boolean
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const rightColRef = useRef<HTMLDivElement>(null);
 
+  // True when the viewport is wide enough for multi-column layout (matches the
+  // 1080px breakpoint in globals.css).  A/B layout overrides must only apply
+  // in this state so they never stomp the mobile single-column media query.
+  const [isWide, setIsWide] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1081px)');
+    setIsWide(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsWide(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
   // Fetch closure list on mount
   useEffect(() => {
     listRecentClosures({ months: 24, limit: 60 })
@@ -622,8 +634,11 @@ function AlertDashboardContent({ abOptOut, toggleAbOptOut }: { abOptOut: boolean
       size: ['narrow', 'normal', 'wide'],
     },
   });
-  const isSwapped = !abOptOut && layoutResolved.config.layout === 'swapped';
-  const sidebarW = abOptOut ? undefined
+  // Only apply A/B layout overrides when the viewport is in multi-column mode.
+  // On mobile the grid is already single-column via media query and inline
+  // styles would override that, breaking the layout.
+  const isSwapped = isWide && !abOptOut && layoutResolved.config.layout === 'swapped';
+  const sidebarW = !isWide || abOptOut ? undefined
     : layoutResolved.config.size === 'wide' ? 320
     : layoutResolved.config.size === 'narrow' ? 200
     : undefined;
