@@ -238,6 +238,64 @@ Para la modelación de las métricas históricas, se definen las siguientes vari
 
 \end{enumerate}
 
+%% Lo del ab testing
+
+\subsection*{A/B Testing Adaptativo}
+
+El módulo de A/B testing fue desarrollado como un paquete independiente (\texttt{auto-ab}) e integrado directamente al dashboard. El objetivo es determinar, de forma automática y continua, qué configuración visual de cada componente maximiza el engagement del auditor, sin requerir experimentos manuales ni períodos de análisis fijos.
+
+\subsubsection*{Algoritmo de selección: \(\varepsilon\)-greedy}
+
+Cada experimento define un conjunto de dimensiones con sus posibles valores. El espacio de variantes \( V \) se construye como el producto cruz de esos valores, truncado a un máximo configurable (24 por defecto). La variante asignada a una sesión se decide una vez y se persiste en cookie durante 24 horas, garantizando experiencia consistente.
+
+La decisión en cada sesión nueva sigue la política \(\varepsilon\)-codiciosa:
+
+\[
+\text{Variante asignada} = \begin{cases}
+v \sim \text{Uniforme}(V) & \text{con probabilidad } \varepsilon \\[4pt]
+v^* = \displaystyle\arg\max_{v \in V}\; \overline{h}_v & \text{con probabilidad } 1 - \varepsilon
+\end{cases}
+\]
+
+donde \( \overline{h}_v \) es el tiempo medio de hover acumulado para la variante \( v \), y \( \varepsilon = 0.15 \) en el dashboard de Talos (15\% de exploración, 85\% de explotación). Si ninguna variante tiene historial o si hay empate, la selección recae en una elección uniforme al azar.
+
+\subsubsection*{Recolección de métricas}
+
+Para cada componente instrumentado, el tracker mide tres señales de comportamiento del auditor:
+
+\begin{itemize}
+    \item \textbf{hoverTimeMs}: tiempo acumulado con el puntero sobre el componente, medido mediante eventos \texttt{pointerenter}, \texttt{pointermove} y \texttt{pointerleave}. Es la señal de optimización por defecto.
+    \item \textbf{screenTimeMs}: tiempo que el componente estuvo visible en el viewport (\texttt{IntersectionObserver}).
+    \item \textbf{sessionTimeMs}: duración total de la sesión desde la carga del componente.
+\end{itemize}
+
+Las métricas se acumulan en memoria y se envían al adaptador cada 4\,000\,ms (\texttt{flushIntervalMs}), además de en los eventos \texttt{visibilitychange} y \texttt{pagehide} para evitar pérdida de datos al navegar o cerrar la pestaña.
+
+\subsubsection*{Experimentos activos en el dashboard}
+
+El dashboard ejecuta seis experimentos simultáneos, cada uno asociado a un componente específico:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Clave} & \textbf{Componente} & \textbf{Dimensiones} \\
+\midrule
+\texttt{donut-stroke}       & Gráfica de dona (resumen) & \texttt{size} \{small, medium, large\}, \texttt{fontSize} \{24, 32, 40\} \\
+\texttt{dashboard-layout}   & Distribución de columnas  & \texttt{layout} \{default, swapped\}, \texttt{size} \{narrow, normal, wide\} \\
+\texttt{alert-table-style}  & Tabla de alertas          & \texttt{fontSize} \{12, 13, 14\}, \texttt{size} \{compact, normal, spacious\} \\
+\texttt{filter-panel-style} & Panel de filtros          & \texttt{size} \{small, medium, large\}, \texttt{color} \{3 colores\} \\
+\texttt{trend-bar-style}    & Gráfica de barras (top 12)& \texttt{color} \{3 colores\}, \texttt{fontSize} \{9, 11, 13\} \\
+\texttt{activity-feed-style}& Feed de hallazgos críticos& \texttt{fontSize} \{12, 13, 14\}, \texttt{size} \{compact, normal, spacious\} \\
+\bottomrule
+\end{tabular}
+\caption{Experimentos de A/B testing activos y sus dimensiones.}
+\end{table}
+
+\subsubsection*{Persistencia}
+
+Las estadísticas acumuladas por variante se almacenan en \texttt{localStorage} con el namespace \texttt{talos-ab}.
+
 \section*{Resultados}
 Se consolidó un catálogo de 14 métricas con severidades CRÍTICA, ALTA y MEDIA, cubriendo anomalías locales e históricas y generando reportes accionables para operación y auditoría.
 
